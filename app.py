@@ -20,8 +20,8 @@ GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
 # GOOGLE SHEETS HELPERS (UPDATED FOR SECRETS)
 # =========================
 @st.cache_data(ttl=60)
-def get_gsheet_client(_cache_buster=None):
-    # This correctly loads the service account dictionary from st.secrets
+def get_gsheet_client():
+    # 🟢 Use this method to read the correct secrets dictionary
     client = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
     return client
 
@@ -30,7 +30,7 @@ def load_sheet(worksheet_name: str) -> pd.DataFrame:
     # Pass a dummy value to the cache-busting argument.
     client = get_gsheet_client(_cache_buster=1) 
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet(worksheet_name)
-    records = sheet.get_all_records() # <-- THIS LINE WAS MISSING/TRUNCATED
+    records = sheet.get_all_records()
     
     if not records:
         return pd.DataFrame()
