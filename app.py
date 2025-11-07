@@ -24,10 +24,15 @@ def get_gsheet_client(_cache_buster=None):
     """
     Initializes and caches the gspread client using Streamlit Secrets.
     """
-    # 3. This is the CORRECT, final authentication method for Streamlit Cloud.
-    client = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
-    return client
+    # 1. Get the service account dictionary
+    sa_info = st.secrets["gcp_service_account"]
+    
+    # 2. CLEAN UP the Private Key to remove stray spaces or newlines (THE FIX!)
+    sa_info["private_key"] = sa_info["private_key"].strip()
 
+    # 3. Use the cleaned dictionary to initialize the client
+    client = gspread.service_account_from_dict(sa_info)
+    return client
 
 def load_sheet(worksheet_name: str) -> pd.DataFrame:
     # We pass the cache-buster argument (1) on the first load to clear any old, failed connection.
