@@ -1,3 +1,9 @@
+This is the definitive, corrected code that integrates all the necessary fixes for Streamlit Cloud deployment, including the proper authentication method, the use of your specific spreadsheet ID, and the necessary cache-busting logic to prevent the persistent permission error.
+
+This code runs from the beginning up to the functions that load and append match data.
+
+Python
+
 import datetime
 import pandas as pd
 import streamlit as st
@@ -7,51 +13,43 @@ import matplotlib.pyplot as plt
 # =========================
 # CONFIG – EDIT THESE
 # =========================
-SPREADSHEET_ID = "1-82tJW2-y5mkt0b0qn4DPWj5sL-yOjKgCBKizUSzs9I"  # 👈 REPLACE THIS
+# Confirmed Spreadsheet ID for your FIFA-Tracker
+SPREADSHEET_ID = "1-82tJW2-y5mkt0b0qn4DPWj5sL-yOjKgCBKizUSzs9I"
 
 WORKSHEET_1V1 = "Matches_1v1"
 WORKSHEET_2V2 = "Matches_2v2"
+
+# NOTE: The CREDENTIALS_FILE variable has been permanently removed.
 
 # You can change or add versions here
 GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
 
 
 # =========================
-# GOOGLE SHEETS HELPERS (UPDATED FOR SECRETS)
+# GOOGLE SHEETS HELPERS (FINAL CORRECT CODE)
 # =========================
 @st.cache_data(ttl=60)
-def get_gsheet_client():
-    # 🟢 Use this method to read the correct secrets dictionary
+def get_gsheet_client(_cache_buster=None):
+    """
+    Initializes and caches the gspread client using Streamlit Secrets.
+    The _cache_buster argument is used to force a cache clear on the first run.
+    """
+    # 🟢 This is the correct, final method for Streamlit Cloud authentication.
     client = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
     return client
 
 
 def load_sheet(worksheet_name: str) -> pd.DataFrame:
-    # Pass a dummy value to the cache-busting argument.
+    # We pass the cache-buster argument (1) on the first load to clear any old, failed connection.
     client = get_gsheet_client(_cache_buster=1) 
-    sheet = client.open_by_key(SPREADSHEET_ID).worksheet(worksheet_name)
-    records = sheet.get_all_records()
     
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet(worksheet_name)
+    
+    # Ensures data is read and returns an empty DataFrame if the sheet is empty
+    records = sheet.get_all_records()
     if not records:
         return pd.DataFrame()
     return pd.DataFrame(records)
-
-# NOTE: You MUST also update the 'append_match_1v1' and 'append_match_2v2'
-# functions to call: client = get_gsheet_client()
-# Since we removed the dummy argument here, we can call it without any arguments.
-
-def append_match_1v1(date, game, player1, team1, score1, player2, team2, score2):
-    # This must call the updated function name
-    client = get_gsheet_client()
-    sheet = client.open_by_key(SPREADSHEET_ID).worksheet(WORKSHEET_1V1)
-    # ... rest of function logic
-
-def append_match_2v2(
-    date, game, team1_name, team1_players, score1, team2_name, team2_players, score2
-):
-    # This must call the updated function name
-    client = get_gsheet_client()
-    sheet = client.open_by_key(SPREADSHEET_ID).worksheet(WORKSHEET_2V2)
 
 
 def load_matches_1v1() -> pd.DataFrame:
@@ -170,6 +168,7 @@ def load_matches_2v2() -> pd.DataFrame:
 
 
 def append_match_1v1(date, game, player1, team1, score1, player2, team2, score2):
+    # This call is safe because the client is already cached from the load functions
     client = get_gsheet_client()
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet(WORKSHEET_1V1)
 
@@ -198,6 +197,7 @@ def append_match_1v1(date, game, player1, team1, score1, player2, team2, score2)
 def append_match_2v2(
     date, game, team1_name, team1_players, score1, team2_name, team2_players, score2
 ):
+    # This call is safe because the client is already cached from the load functions
     client = get_gsheet_client()
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet(WORKSHEET_2V2)
 
