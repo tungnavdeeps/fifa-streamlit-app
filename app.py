@@ -1,5 +1,5 @@
 import datetime
-
+import json # ADDED
 import pandas as pd
 import streamlit as st
 import gspread
@@ -13,18 +13,24 @@ SPREADSHEET_ID = "1-82tJW2-y5mkt0b0qn4DPWj5sL-yOjKgCBKizUSzs9I"  # 👈 REPLACE 
 WORKSHEET_1V1 = "Matches_1v1"
 WORKSHEET_2V2 = "Matches_2v2"
 
-client = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
+# CREDENTIALS_FILE = "google_credentials.json" # 👈 THIS IS NO LONGER USED
 
 # You can change or add versions here
 GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
 
 
 # =========================
-# GOOGLE SHEETS HELPERS
+# GOOGLE SHEETS HELPERS (UPDATED FOR SECRETS)
 # =========================
 @st.cache_data(ttl=60)
 def get_gsheet_client():
-    client = gspread.service_account(filename=CREDENTIALS_FILE)
+    # Read the ENTIRE JSON string from the Streamlit secret
+    credentials_json = st.secrets["gcp_service_account_json"]
+    # Parse the JSON string into a dictionary
+    credentials_dict = json.loads(credentials_json)
+    
+    # Authenticate using the dictionary
+    client = gspread.service_account_from_dict(credentials_dict)
     return client
 
 
@@ -1197,7 +1203,7 @@ elif page == "Head-to-Head (1v1)":
 
                     if avg_ga_t2 < avg_ga_all2:
                         verdict2.append("concedes **fewer** goals")
-                    elif avg_ga_t2 > avg_ga_all2:
+                    elif avg_gf_t2 > avg_ga_all2:
                         verdict2.append("concedes **more** goals")
 
                     if verdict2:
@@ -1258,3 +1264,4 @@ elif page == "All Data":
             filtered_2v2.sort_values(by="date", ascending=False),
             use_container_width=True,
         )
+    
