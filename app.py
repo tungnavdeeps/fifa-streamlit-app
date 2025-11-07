@@ -1,9 +1,3 @@
-This is the definitive, corrected code that integrates all the necessary fixes for Streamlit Cloud deployment, including the proper authentication method, the use of your specific spreadsheet ID, and the necessary cache-busting logic to prevent the persistent permission error.
-
-This code runs from the beginning up to the functions that load and append match data.
-
-Python
-
 import datetime
 import pandas as pd
 import streamlit as st
