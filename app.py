@@ -12,8 +12,6 @@ SPREADSHEET_ID = "1-82tJW2-y5mkt0b0qn4DPWj5sL-yOjKgCBKizUSzs9I"  # 👈 REPLACE 
 WORKSHEET_1V1 = "Matches_1v1"
 WORKSHEET_2V2 = "Matches_2v2"
 
-# CREDENTIALS_FILE = "google_credentials.json" # 👈 THIS IS NO LONGER USED
-
 # You can change or add versions here
 GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
 
@@ -23,8 +21,6 @@ GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
 # =========================
 @st.cache_data(ttl=60)
 def get_gsheet_client():
-    # Streamlit automatically converts the TOML structure into a Python dictionary.
-    # We pass that dictionary directly to gspread.
     client = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
     return client
 
