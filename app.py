@@ -20,20 +20,38 @@ GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
 # GOOGLE SHEETS HELPERS (UPDATED FOR SECRETS)
 # =========================
 @st.cache_data(ttl=60)
-def get_new_gsheet_client(): # 👈 CHANGE NAME HERE
-    # Ensure this is the CORRECT method for Streamlit Cloud
+def get_gsheet_client(_cache_buster=None):
+    # This correctly loads the service account dictionary from st.secrets
     client = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
     return client
 
 
 def load_sheet(worksheet_name: str) -> pd.DataFrame:
-    # Use the new function name here
-    client = get_new_gsheet_client() # 👈 CHANGE NAME HERE
+    # Pass a dummy value to the cache-busting argument.
+    client = get_gsheet_client(_cache_buster=1) 
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet(worksheet_name)
+    records = sheet.get_all_records() # <-- THIS LINE WAS MISSING/TRUNCATED
     
-if st.sidebar.button("Clear Streamlit Data Cache"):
-    st.cache_data.clear()
-    st.rerun()
+    if not records:
+        return pd.DataFrame()
+    return pd.DataFrame(records)
+
+# NOTE: You MUST also update the 'append_match_1v1' and 'append_match_2v2'
+# functions to call: client = get_gsheet_client()
+# Since we removed the dummy argument here, we can call it without any arguments.
+
+def append_match_1v1(date, game, player1, team1, score1, player2, team2, score2):
+    # This must call the updated function name
+    client = get_gsheet_client()
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet(WORKSHEET_1V1)
+    # ... rest of function logic
+
+def append_match_2v2(
+    date, game, team1_name, team1_players, score1, team2_name, team2_players, score2
+):
+    # This must call the updated function name
+    client = get_gsheet_client()
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet(WORKSHEET_2V2)
 
 
 def load_matches_1v1() -> pd.DataFrame:
