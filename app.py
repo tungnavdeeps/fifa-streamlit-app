@@ -23,14 +23,16 @@ GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
 def get_gsheet_client(_cache_buster=None):
     """
     Initializes and caches the gspread client using Streamlit Secrets.
+    Safely cleans the private key to avoid Base64 decoding errors.
     """
-    # 1. Get the service account dictionary
-    sa_info = st.secrets["gcp_service_account"]
+    # 1. MAKE A COPY of the secrets dictionary to allow modifications.
+    sa_info = st.secrets["gcp_service_account"].copy()
     
-    # 2. CLEAN UP the Private Key to remove stray spaces or newlines (THE FIX!)
+    # 2. CLEAN UP the Private Key to remove stray spaces or newlines.
+    # This fixes the Base64 decoding error.
     sa_info["private_key"] = sa_info["private_key"].strip()
 
-    # 3. Use the cleaned dictionary to initialize the client
+    # 3. Use the cleaned dictionary to initialize the gspread client.
     client = gspread.service_account_from_dict(sa_info)
     return client
 
