@@ -1,5 +1,4 @@
 import datetime
-import json # ADDED
 import pandas as pd
 import streamlit as st
 import gspread
@@ -24,13 +23,9 @@ GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
 # =========================
 @st.cache_data(ttl=60)
 def get_gsheet_client():
-    # Read the ENTIRE JSON string from the Streamlit secret
-    credentials_json = st.secrets["gcp_service_account_json"]
-    # Parse the JSON string into a dictionary
-    credentials_dict = json.loads(credentials_json)
-    
-    # Authenticate using the dictionary
-    client = gspread.service_account_from_dict(credentials_dict)
+    # Streamlit automatically converts the TOML structure into a Python dictionary.
+    # We pass that dictionary directly to gspread.
+    client = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
     return client
 
 
