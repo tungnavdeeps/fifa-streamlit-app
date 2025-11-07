@@ -20,21 +20,20 @@ GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
 # GOOGLE SHEETS HELPERS (UPDATED FOR SECRETS)
 # =========================
 @st.cache_data(ttl=60)
-def get_gsheet_client():
+def get_new_gsheet_client(): # 👈 CHANGE NAME HERE
+    # Ensure this is the CORRECT method for Streamlit Cloud
     client = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
     return client
+
+
+def load_sheet(worksheet_name: str) -> pd.DataFrame:
+    # Use the new function name here
+    client = get_new_gsheet_client() # 👈 CHANGE NAME HERE
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet(worksheet_name)
     
 if st.sidebar.button("Clear Streamlit Data Cache"):
     st.cache_data.clear()
     st.rerun()
-
-def load_sheet(worksheet_name: str) -> pd.DataFrame:
-    client = get_gsheet_client()
-    sheet = client.open_by_key(SPREADSHEET_ID).worksheet(worksheet_name)
-    records = sheet.get_all_records()
-    if not records:
-        return pd.DataFrame()
-    return pd.DataFrame(records)
 
 
 def load_matches_1v1() -> pd.DataFrame:
