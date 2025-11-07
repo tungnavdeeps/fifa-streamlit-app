@@ -23,7 +23,10 @@ GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
 def get_gsheet_client():
     client = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
     return client
-
+    
+if st.sidebar.button("Clear Streamlit Data Cache"):
+    st.cache_data.clear()
+    st.rerun()
 
 def load_sheet(worksheet_name: str) -> pd.DataFrame:
     client = get_gsheet_client()
@@ -1255,4 +1258,3 @@ elif page == "All Data":
             filtered_2v2.sort_values(by="date", ascending=False),
             use_container_width=True,
         )
-    
