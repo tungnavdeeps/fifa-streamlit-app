@@ -3,48 +3,61 @@ import pandas as pd
 import streamlit as st
 import gspread
 import matplotlib.pyplot as plt
+import time # 👈 1. ADD THIS IMPORT
 
 # =========================
 # CONFIG – EDIT THESE
 # =========================
-# Confirmed Spreadsheet ID for your FIFA-Tracker
-SPREADSHEET_ID = "1-82tJW2-y5mkt0b0qn4DPWj5sL-yOjKgCBKizUSzs9I"
-
+SPREADSHEET_ID = "1-82tJW2-y5mkt0b0qn4DPWj5sL-yOjKgCBKizUSzs9I" 
 WORKSHEET_1V1 = "Matches_1v1"
 WORKSHEET_2V2 = "Matches_2v2"
-
-# NOTE: The CREDENTIALS_FILE variable has been permanently removed.
 
 # You can change or add versions here
 GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
 
 
 # =========================
-# GOOGLE SHEETS HELPERS (FINAL CORRECT CODE)
+# GOOGLE SHEETS HELPERS (FINAL CORRECTED CODE WITH RETRY)
 # =========================
 @st.cache_data(ttl=60)
 def get_gsheet_client(_cache_buster=None):
     """
     Initializes and caches the gspread client using Streamlit Secrets.
-    The _cache_buster argument is used to force a cache clear on the first run.
     """
-    # 🟢 This is the correct, final method for Streamlit Cloud authentication.
+    # 3. This is the CORRECT, final authentication method for Streamlit Cloud.
     client = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
     return client
 
 
 def load_sheet(worksheet_name: str) -> pd.DataFrame:
     # We pass the cache-buster argument (1) on the first load to clear any old, failed connection.
-    client = get_gsheet_client(_cache_buster=1) 
+    client = get_gsheet_client(_cache_buster=1)
     
-    sheet = client.open_by_key(SPREADSHEET_ID).worksheet(worksheet_name)
+    # === 4. ADD RETRY LOGIC HERE ===
+    MAX_RETRIES = 3
+    for attempt in range(MAX_RETRIES):
+        try:
+            # Attempt the connection
+            sheet = client.open_by_key(SPREADSHEET_ID).worksheet(worksheet_name)
+            
+            # Ensures data is read and returns an empty DataFrame if the sheet is empty
+            records = sheet.get_all_records()
+            if not records:
+                return pd.DataFrame() 
+            return pd.DataFrame(records)
+            
+        except Exception as e:
+            # Catch the error that leads to the AttributeError
+            if attempt < MAX_RETRIES - 1:
+                st.warning(f"Connection attempt {attempt + 1} failed for {worksheet_name}. Retrying in 2 seconds...")
+                time.sleep(2) 
+            else:
+                # If the last attempt fails, re-raise the exception to show the error
+                st.error(f"Failed to connect to Google Sheet after {MAX_RETRIES} attempts.")
+                raise e
+    # ==============================
     
-    # Ensures data is read and returns an empty DataFrame if the sheet is empty
-    records = sheet.get_all_records()
-    if not records:
-        return pd.DataFrame()
-    return pd.DataFrame(records)
-
+    return pd.DataFrame()
 
 def load_matches_1v1() -> pd.DataFrame:
     """
