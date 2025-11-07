@@ -25,22 +25,40 @@ def get_gsheet_client(_cache_buster=None):
     Initializes and caches the gspread client using Streamlit Secrets.
     Safely cleans the private key to avoid Base64 decoding errors.
     """
-    # 1. MAKE A COPY of the secrets dictionary to allow modifications.
-    sa_info = st.secrets["gcp_service_account"].copy()
+    SECRET_KEY = "gcp_service_account"
     
-    # 2. CLEAN UP the Private Key to remove stray spaces or newlines.
-    # This fixes the Base64 decoding error.
-    sa_info["private_key"] = sa_info["private_key"].strip()
+    # 1. Check if the secret exists. If not, stop the app with a clear message.
+    if SECRET_KEY not in st.secrets:
+        st.error(
+            "🛑 **Secret Key Missing!** Please ensure you have configured the Streamlit Cloud secret named "
+            f"`{SECRET_KEY}` with the service account JSON contents."
+        )
+        # Use st.stop() to prevent the application from continuing and crashing
+        st.stop()
+        
+    # 2. MAKE A COPY of the secrets dictionary to allow modifications.
+    # This prevents the "Secrets does not support item assignment" error.
+    sa_info = st.secrets[SECRET_KEY].copy()
+    
+    # 3. CLEAN UP the Private Key to remove stray spaces or newlines.
+    # This fixes the Base64 decoding error we saw earlier.
+    if isinstance(sa_info.get("private_key"), str):
+        sa_info["private_key"] = sa_info["private_key"].strip()
 
-    # 3. Use the cleaned dictionary to initialize the gspread client.
-    client = gspread.service_account_from_dict(sa_info)
-    return client
+    # 4. Use the cleaned dictionary to initialize the gspread client.
+    try:
+        client = gspread.service_account_from_dict(sa_info)
+        return client
+    except Exception as e:
+        st.error(f"❌ **Authentication Failed!** Could not connect using the `{SECRET_KEY}` credentials.")
+        st.warning("Double-check that your private key is correctly formatted and that the service account is an Editor on your Google Sheet.")
+        st.stop()
+
 
 def load_sheet(worksheet_name: str) -> pd.DataFrame:
-    # We pass the cache-buster argument (1) on the first load to clear any old, failed connection.
+    # We combine retry logic with the client getter
     client = get_gsheet_client(_cache_buster=1)
     
-    # === 4. ADD RETRY LOGIC HERE ===
     MAX_RETRIES = 3
     for attempt in range(MAX_RETRIES):
         try:
@@ -62,7 +80,6 @@ def load_sheet(worksheet_name: str) -> pd.DataFrame:
                 # If the last attempt fails, re-raise the exception to show the error
                 st.error(f"Failed to connect to Google Sheet after {MAX_RETRIES} attempts.")
                 raise e
-    # ==============================
     
     return pd.DataFrame()
 
