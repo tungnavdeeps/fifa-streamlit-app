@@ -22,7 +22,7 @@ GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
 def get_gsheet_client():
     """
     Initializes and caches the gspread client.
-    Performs aggressive manual cleanup of the private_key string 
+    Performs the most aggressive manual cleanup possible of the private_key string 
     to fix Streamlit's corruption and ensure valid Base64 decoding.
     """
     SECRET_KEY = "gcp_service_account"
@@ -39,22 +39,23 @@ def get_gsheet_client():
         # 1. Fix escaped newlines that Streamlit adds
         private_key_fixed = raw_key.replace('\\n', '\n')
         
-        # 2. Aggressively strip all whitespace/newlines from the actual key content
         begin = '-----BEGIN PRIVATE KEY-----'
         end = '-----END PRIVATE KEY-----'
         
         if begin in private_key_fixed and end in private_key_fixed:
-            # Split the string to isolate the Base64 content block
+            # Split the string to isolate the raw Base64 content
             content = private_key_fixed.split(begin)[1].split(end)[0]
             
-            # Remove ALL whitespace and newlines from the content string
+            # Remove ALL whitespace and newlines from the Base64 content string
             clean_content = "".join(content.split())
             
-            # Reconstruct the final key string exactly as gspread expects it
-            final_key = f"{begin}\n{clean_content}\n{end}\n"
+            # Reconstruct the final key string exactly with expected markers and explicit newlines
+            final_key = f"{begin}\n{clean_content}\n{end}" # Note: removed the trailing \n
+            
+            # Apply a final, global strip to remove any lingering outside whitespace
             sa_info["private_key"] = final_key.strip()
         else:
-            # Fallback for simpler keys (though not expected here)
+            # Fallback (shouldn't happen with the correct secret structure)
             sa_info["private_key"] = private_key_fixed.strip()
     
     try:
