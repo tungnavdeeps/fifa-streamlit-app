@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 # CONFIG – EDIT THESE
 # =========================
 # Confirmed to be your Sheet ID
-SPREADSHEET_ID = "1-82tJW2-y5mkt0b0qn4DPWj5sL-yOjKgCBKizUSzs9I" 
+SPREADSHEET_ID = "https://docs.google.com/spreadsheets/d/1-82tJW2-y5mkt0b0qn4DPj5sL-yOjKgCBKizUSzs9I/edit" 
 WORKSHEET_1V1 = "Matches_1v1"
 WORKSHEET_2V2 = "Matches_2v2"
 
