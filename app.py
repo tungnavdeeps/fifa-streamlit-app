@@ -56,7 +56,7 @@ def load_sheet(worksheet_name: str) -> pd.DataFrame:
     MAX_RETRIES = 3
     for attempt in range(MAX_RETRIES):
         try:
-            spreadsheet = client.open_by_key(SPREADSHEET_ID)
+            spreadsheet = client.open_by_url(SPREADSHEET_ID)
             
             # --- DEFENSIVE SHEET RETRIEVAL ---
             target_name = worksheet_name.strip().lower()
