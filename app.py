@@ -23,8 +23,7 @@ GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
 def get_gsheet_client():
     """
     Initializes and caches the gspread client.
-    Performs the most aggressive manual cleanup possible of the private_key string 
-    to fix Streamlit's corruption and eliminate all stray whitespace/bytes.
+    Performs the final, absolute zero-tolerance cleanup of the private_key string.
     """
     SECRET_KEY = "gcp_service_account"
     
@@ -37,35 +36,24 @@ def get_gsheet_client():
     if "private_key" in sa_info:
         raw_key = sa_info["private_key"]
         
-        # 1. CRITICAL: Aggressively strip all leading/trailing whitespace/non-printable chars 
-        # from the raw secret value read from Streamlit. This targets the 'Unused bytes' error.
-        stripped_key = raw_key.strip()
+        # 1. Fix escaped newlines that Streamlit adds (a common corruption)
+        private_key_fixed = raw_key.replace('\\n', '\n')
         
-        # 2. Fix escaped newlines that Streamlit adds (\n becomes an actual newline)
-        private_key_fixed = stripped_key.replace('\\n', '\n')
-        
-        # 3. Aggressive Internal Cleanup
         begin = '-----BEGIN PRIVATE KEY-----'
         end = '-----END PRIVATE KEY-----'
         
         if begin in private_key_fixed and end in private_key_fixed:
-            try:
-                # Use splitlines() to get a list of lines, filtering out empty ones
-                lines = [line.strip() for line in private_key_fixed.splitlines() if line.strip()]
-
-                # Isolate the Base64 content by removing BEGIN/END markers
-                content_lines = [line for line in lines if line != begin and line != end]
-
-                # Join the clean content lines without any spaces in between
-                clean_content = "".join(content_lines)
-
-                # Reconstruct the final key string with required markers and newlines
-                final_key = f"{begin}\n{clean_content}\n{end}"
-                
-                sa_info["private_key"] = final_key # Final result is assigned
-            except Exception:
-                # Fallback in case the splitting failed, but still apply basic cleanup
-                sa_info["private_key"] = private_key_fixed.strip()
+            # Step 2: Clean the entire string by removing ALL spaces and newlines
+            key_no_whitespace = private_key_fixed.replace(' ', '').replace('\n', '')
+            
+            # Step 3: Remove the BEGIN/END markers from the cleaned string to isolate ONLY the Base64 content
+            content_only = key_no_whitespace.replace(begin.replace(' ', ''), '').replace(end.replace(' ', ''), '')
+            
+            # Step 4: Reconstruct the key string exactly with expected markers and newlines
+            final_key = f"{begin}\n{content_only}\n{end}"
+            
+            # Step 5: Assign the zero-tolerance cleaned key, stripping any outside whitespace
+            sa_info["private_key"] = final_key.strip()
         else:
             sa_info["private_key"] = private_key_fixed.strip()
     
@@ -81,7 +69,6 @@ def get_gsheet_client():
         )
         st.exception(e)
         st.stop()
-        
 
 def load_sheet(worksheet_name: str) -> pd.DataFrame:
     """Loads data from a specified worksheet with retry logic."""
