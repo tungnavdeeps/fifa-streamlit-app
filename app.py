@@ -1,9 +1,9 @@
+import time
 import datetime
 import pandas as pd
 import streamlit as st
 import gspread
 import matplotlib.pyplot as plt
-import time # 👈 1. ADD THIS IMPORT
 
 # =========================
 # CONFIG – EDIT THESE
@@ -23,7 +23,6 @@ GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
 def get_gsheet_client(_cache_buster=None):
     """
     Initializes and caches the gspread client using Streamlit Secrets.
-    Safely cleans the private key to avoid Base64 decoding errors.
     """
     SECRET_KEY = "gcp_service_account"
     
@@ -33,15 +32,19 @@ def get_gsheet_client(_cache_buster=None):
             "🛑 **Secret Key Missing!** Please ensure you have configured the Streamlit Cloud secret named "
             f"`{SECRET_KEY}` with the service account JSON contents."
         )
-        # Use st.stop() to prevent the application from continuing and crashing
         st.stop()
         
-    # 2. MAKE A COPY of the secrets dictionary to allow modifications.
-    # This prevents the "Secrets does not support item assignment" error.
-    sa_info = st.secrets[SECRET_KEY].copy()
-    
+    # 2. FIX: Convert the ImmutableSecrets object to a standard Python dict.
+    # This solves the AttributeError: 'st.secrets' has no attribute 'copy'.
+    try:
+        # Use dict() to safely convert the Streamlit secret object into a standard, mutable dictionary.
+        sa_info = dict(st.secrets[SECRET_KEY])
+    except Exception as e:
+        st.error(f"❌ **Secret Parsing Error!** Could not convert the secret named `{SECRET_KEY}` into a dictionary.")
+        st.warning("Ensure the TOML formatting is perfect, especially the triple quotes around `private_key`.")
+        st.stop()
+
     # 3. CLEAN UP the Private Key to remove stray spaces or newlines.
-    # This fixes the Base64 decoding error we saw earlier.
     if isinstance(sa_info.get("private_key"), str):
         sa_info["private_key"] = sa_info["private_key"].strip()
 
@@ -53,33 +56,6 @@ def get_gsheet_client(_cache_buster=None):
         st.error(f"❌ **Authentication Failed!** Could not connect using the `{SECRET_KEY}` credentials.")
         st.warning("Double-check that your private key is correctly formatted and that the service account is an Editor on your Google Sheet.")
         st.stop()
-
-
-def load_sheet(worksheet_name: str) -> pd.DataFrame:
-    # We combine retry logic with the client getter
-    client = get_gsheet_client(_cache_buster=1)
-    
-    MAX_RETRIES = 3
-    for attempt in range(MAX_RETRIES):
-        try:
-            # Attempt the connection
-            sheet = client.open_by_key(SPREADSHEET_ID).worksheet(worksheet_name)
-            
-            # Ensures data is read and returns an empty DataFrame if the sheet is empty
-            records = sheet.get_all_records()
-            if not records:
-                return pd.DataFrame() 
-            return pd.DataFrame(records)
-            
-        except Exception as e:
-            # Catch the error that leads to the AttributeError
-            if attempt < MAX_RETRIES - 1:
-                st.warning(f"Connection attempt {attempt + 1} failed for {worksheet_name}. Retrying in 2 seconds...")
-                time.sleep(2) 
-            else:
-                # If the last attempt fails, re-raise the exception to show the error
-                st.error(f"Failed to connect to Google Sheet after {MAX_RETRIES} attempts.")
-                raise e
     
     return pd.DataFrame()
 
