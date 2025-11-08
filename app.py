@@ -48,45 +48,60 @@ def get_gsheet_client():
 
 def load_sheet(worksheet_name: str) -> pd.DataFrame:
     """
-    Loads data from a specified worksheet using get_all_records() for simplicity.
-    Includes a direct check for an empty result.
+    Loads data from a specified worksheet. Uses a defensive approach to find
+    the worksheet title, ignoring case and stripping spaces.
     """
     client = get_gsheet_client() 
     
     MAX_RETRIES = 3
     for attempt in range(MAX_RETRIES):
         try:
-            sheet = client.open_by_key(SPREADSHEET_ID).worksheet(worksheet_name)
+            spreadsheet = client.open_by_key(SPREADSHEET_ID)
             
-            # --- Try the preferred get_all_records() method first ---
+            # --- DEFENSIVE SHEET RETRIEVAL ---
+            target_name = worksheet_name.strip().lower()
+            sheet = None
+            
+            # Find the worksheet by title, cleaning up names for a perfect match
+            for ws in spreadsheet.worksheets():
+                if ws.title.strip().lower() == target_name:
+                    sheet = ws
+                    break
+            
+            if sheet is None:
+                st.error(f"❌ Worksheet not found: Could not find a sheet named '{worksheet_name}'.")
+                return pd.DataFrame()
+            # ----------------------------------
+            
+            # --- Load Records with Fallback ---
             records = sheet.get_all_records()
             
             if records:
-                # If records are found, return the DataFrame immediately
-                return pd.DataFrame(records)
+                df = pd.DataFrame(records)
+                # Ensure column headers are clean, as implemented previously
+                df.columns = [col.strip().lower() for col in df.columns]
+                return df
             
-            # --- FALLBACK: If records is empty, check using get_all_values() ---
-            # This is a less strict check that confirms if headers and data are present
+            # If get_all_records() fails, use get_all_values() as a strict fallback check
             all_values = sheet.get_all_values()
             
             if len(all_values) >= 2:
-                # If we have headers (row 0) and at least one data row (row 1+)
                 headers = [col.strip().lower() for col in all_values[0]]
                 data = all_values[1:]
                 
-                # Check for length mismatch before creating DataFrame
                 if all(len(row) == len(headers) for row in data):
-                    st.warning(f"⚠️ **Loaded '{worksheet_name}' using fallback method.**")
-                    return pd.DataFrame(data, columns=headers)
+                    st.warning(f"⚠️ Loaded '{worksheet_name}' using fallback method.")
+                    df = pd.DataFrame(data, columns=headers)
+                    # Data loaded via get_all_values is all strings, we need to re-run the cleaning in load_matches_1v1
+                    return df
                 
-            # If neither method yields usable data, raise an error or return empty
             return pd.DataFrame() 
             
         except Exception as e:
             if attempt < MAX_RETRIES - 1:
                 time.sleep(2) 
             else:
-                st.error(f"Failed to connect to Google Sheet after {MAX_RETRIES} attempts.")
+                st.error(f"Failed to load data from worksheet '{worksheet_name}' after {MAX_RETRIES} attempts.")
                 raise e
     
     return pd.DataFrame()
