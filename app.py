@@ -1,9 +1,9 @@
-import time
 import datetime
 import pandas as pd
 import streamlit as st
 import gspread
 import matplotlib.pyplot as plt
+import time # Added for retry logic
 
 # =========================
 # CONFIG – EDIT THESE
@@ -17,16 +17,17 @@ GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
 
 
 # =========================
-# GOOGLE SHEETS HELPERS (FINAL CORRECTED CODE WITH RETRY)
+# GOOGLE SHEETS HELPERS (FINAL, ROBUST CONNECTION)
 # =========================
 @st.cache_data(ttl=60)
 def get_gsheet_client(_cache_buster=None):
     """
     Initializes and caches the gspread client using Streamlit Secrets.
+    Handles all known Streamlit/gspread authentication errors.
     """
     SECRET_KEY = "gcp_service_account"
     
-    # 1. Check if the secret exists. If not, stop the app with a clear message.
+    # 1. Check if the secret exists.
     if SECRET_KEY not in st.secrets:
         st.error(
             "🛑 **Secret Key Missing!** Please ensure you have configured the Streamlit Cloud secret named "
@@ -34,249 +35,284 @@ def get_gsheet_client(_cache_buster=None):
         )
         st.stop()
         
-    # 2. FIX: Convert the ImmutableSecrets object to a standard Python dict.
-    # This solves the AttributeError: 'st.secrets' has no attribute 'copy'.
+    # 2. Convert the Streamlit secrets object to a standard, mutable dictionary.
+    # This solves the AttributeError: 'st.secrets' has no attribute "copy".
     try:
-        # Use dict() to safely convert the Streamlit secret object into a standard, mutable dictionary.
         sa_info = dict(st.secrets[SECRET_KEY])
     except Exception as e:
         st.error(f"❌ **Secret Parsing Error!** Could not convert the secret named `{SECRET_KEY}` into a dictionary.")
         st.warning("Ensure the TOML formatting is perfect, especially the triple quotes around `private_key`.")
         st.stop()
 
-    # 3. CLEAN UP the Private Key to remove stray spaces or newlines.
+    # 3. Clean up the Private Key.
+    # This solves the Base64 decoding/whitespace errors.
     if isinstance(sa_info.get("private_key"), str):
         sa_info["private_key"] = sa_info["private_key"].strip()
 
-    # 4. Use the cleaned dictionary to initialize the gspread client.
+    # 4. Initialize the gspread client.
     try:
         client = gspread.service_account_from_dict(sa_info)
         return client
     except Exception as e:
         st.error(f"❌ **Authentication Failed!** Could not connect using the `{SECRET_KEY}` credentials.")
-        st.warning("Double-check that your private key is correctly formatted and that the service account is an Editor on your Google Sheet.")
+        st.warning("Double-check your private key is clean and the service account is an Editor on your Google Sheet.")
         st.stop()
+
+
+def load_sheet(worksheet_name: str) -> pd.DataFrame:
+    """
+    Loads data from a specified worksheet with retry logic for intermittent connection issues.
+    """
+    # get_gsheet_client handles authentication and missing keys.
+    client = get_gsheet_client(_cache_buster=1) 
     
-    return pd.DataFrame()
+    MAX_RETRIES = 3
+    for attempt in range(MAX_RETRIES):
+        try:
+            sheet = client.open_by_key(SPREADSHEET_ID).worksheet(worksheet_name)
+            records = sheet.get_all_records()
+            
+            if not records:
+                return pd.DataFrame() 
+            return pd.DataFrame(records)
+            
+        except Exception as e:
+            if attempt < MAX_RETRIES - 1:
+                st.warning(f"Connection attempt {attempt + 1} failed for {worksheet_name}. Retrying in 2 seconds...")
+                time.sleep(2) 
+            else:
+                st.error(f"Failed to connect to Google Sheet after {MAX_RETRIES} attempts.")
+                st.exception(e) # Show the underlying error for advanced debugging
+                raise e
+    
+    return pd.DataFrame() 
+
+
+# =========================
+# DATA LOADING AND CLEANING
+# =========================
 
 def load_matches_1v1() -> pd.DataFrame:
-    """
-    1v1 sheet columns:
-    date, game, player1, team1, score1, result1, player2, team2, score2, result2
-    """
+    """Loads, cleans, and prepares 1v1 data."""
     df = load_sheet(WORKSHEET_1V1)
+
     if df.empty:
-        return pd.DataFrame(
-            columns=[
-                "date",
-                "game",
-                "player1",
-                "team1",
-                "score1",
-                "result1",
-                "player2",
-                "team2",
-                "score2",
-                "result2",
-            ]
-        )
+        return df
 
-    for col in [
-        "date",
-        "game",
-        "player1",
-        "team1",
-        "score1",
-        "result1",
-        "player2",
-        "team2",
-        "score2",
-        "result2",
-    ]:
-        if col not in df.columns:
-            df[col] = None
-
-    df["date"] = pd.to_datetime(df["date"], errors="coerce")
-    df["score1"] = pd.to_numeric(df["score1"], errors="coerce")
-    df["score2"] = pd.to_numeric(df["score2"], errors="coerce")
-
-    return df[
-        [
-            "date",
-            "game",
-            "player1",
-            "team1",
-            "score1",
-            "result1",
-            "player2",
-            "team2",
-            "score2",
-            "result2",
-        ]
-    ]
+    # Data Cleaning
+    df['date'] = pd.to_datetime(df['date'], format='%Y-%m-%d', errors='coerce')
+    df.dropna(subset=['date', 'game', 'player1', 'player2', 'score1', 'score2'], inplace=True)
+    df = df[df['game'].isin(GAME_OPTIONS)]
+    
+    # Ensure scores are integers
+    df['score1'] = pd.to_numeric(df['score1'], errors='coerce').fillna(0).astype(int)
+    df['score2'] = pd.to_numeric(df['score2'], errors='coerce').fillna(0).astype(int)
+    
+    # Determine the winner based on score
+    df['winner'] = df.apply(
+        lambda row: row['player1'] if row['score1'] > row['score2'] else 
+                    (row['player2'] if row['score2'] > row['score1'] else 'Draw'),
+        axis=1
+    )
+    
+    return df.sort_values(by='date', ascending=True).reset_index(drop=True)
 
 
 def load_matches_2v2() -> pd.DataFrame:
-    """
-    2v2 sheet columns:
-    date, game, team1_name, team1_players, score1, result1,
-          team2_name, team2_players, score2, result2
-    """
+    """Loads, cleans, and prepares 2v2 data."""
     df = load_sheet(WORKSHEET_2V2)
+
     if df.empty:
-        return pd.DataFrame(
-            columns=[
-                "date",
-                "game",
-                "team1_name",
-                "team1_players",
-                "score1",
-                "result1",
-                "team2_name",
-                "team2_players",
-                "score2",
-                "result2",
-            ]
+        return df
+
+    # Data Cleaning (similar to 1v1 but for 2v2 structure)
+    df['date'] = pd.to_datetime(df['date'], format='%Y-%m-%d', errors='coerce')
+    df.dropna(subset=['date', 'game', 'player1', 'player2', 'player3', 'player4', 'score1', 'score2'], inplace=True)
+    df = df[df['game'].isin(GAME_OPTIONS)]
+    
+    # Create team names
+    df['team1_name'] = df['player1'] + ' & ' + df['player2']
+    df['team2_name'] = df['player3'] + ' & ' + df['player4']
+    
+    df['score1'] = pd.to_numeric(df['score1'], errors='coerce').fillna(0).astype(int)
+    df['score2'] = pd.to_numeric(df['score2'], errors='coerce').fillna(0).astype(int)
+
+    # Determine the winning team name
+    df['winner_team'] = df.apply(
+        lambda row: row['team1_name'] if row['score1'] > row['score2'] else 
+                    (row['team2_name'] if row['score2'] > row['score1'] else 'Draw'),
+        axis=1
+    )
+    
+    return df.sort_values(by='date', ascending=True).reset_index(drop=True)
+
+
+# =========================
+# ELO RATING CALCULATION (STARTING POINT)
+# =========================
+
+INITIAL_ELO = 1000
+K_FACTOR = 32 # Can be tuned based on activity/stakes
+
+# Function to calculate expected score (Ea)
+def expected_score(rating_a, rating_b):
+    return 1 / (1 + 10**((rating_b - rating_a) / 400))
+
+# Function to calculate new ELO rating
+def calculate_new_elo(current_elo, expected_score, actual_score, k_factor):
+    # actual_score is 1 for win, 0.5 for draw, 0 for loss
+    return current_elo + k_factor * (actual_score - expected_score)
+
+# Placeholder function to process all 1v1 matches and calculate ELO
+def calculate_elo_1v1(df_1v1: pd.DataFrame) -> pd.DataFrame:
+    if df_1v1.empty:
+        return pd.DataFrame()
+        
+    # Dictionary to hold the current ELO rating for each player/game combo
+    elo_ratings = {} 
+    
+    # List to collect ELO changes for final output
+    elo_history = [] 
+    
+    # Logic to iterate through matches, update ratings, and record history goes here.
+    # We will complete this in the next step.
+
+    return pd.DataFrame(elo_history) # Placeholder return
+    
+# Placeholder function for 2v2 ELO (often treated as team ELO)
+def calculate_elo_2v2(df_2v2: pd.DataFrame) -> pd.DataFrame:
+    # Logic for 2v2 team ELO calculation goes here.
+    return pd.DataFrame()
+
+
+# =========================
+# STREAMLIT UI CODE STARTS HERE
+# =========================
+
+st.set_page_config(
+    page_title="FIFA Tracker",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+st.title("⚽ FIFA Match Tracker")
+
+# Sidebar for controls
+st.sidebar.header("Controls")
+
+# Game selector
+selected_game = st.sidebar.selectbox(
+    "Select Game Version", 
+    GAME_OPTIONS, 
+    index=0
+)
+
+# Cache clearing button
+if st.sidebar.button("Clear Streamlit Data Cache"):
+    st.cache_data.clear()
+    st.rerun()
+
+# Load and filter data by selected game
+df_1v1_raw = load_matches_1v1()
+df_2v2_raw = load_matches_2v2()
+
+df_1v1_game = df_1v1_raw[df_1v1_raw['game'] == selected_game]
+df_2v2_game = df_2v2_raw[df_2v2_raw['game'] == selected_game]
+
+
+# --- Main Tabs ---
+tab_dashboard, tab_add_match, tab_all_data = st.tabs(
+    ["📊 Dashboard", "➕ Add Match", "📜 All Match Data"]
+)
+
+# ======================================================
+# TAB 1: DASHBOARD (ELO and Stats will go here)
+# ======================================================
+with tab_dashboard:
+    st.header(f"Dashboard for {selected_game}")
+    
+    st.markdown("#### ELO Ratings (WIP)")
+    
+    # Placeholder for ELO results
+    df_elo_1v1 = calculate_elo_1v1(df_1v1_game)
+    # df_elo_2v2 = calculate_elo_2v2(df_2v2_game)
+    
+    if df_elo_1v1.empty:
+        st.info("No ELO data yet (or ELO calculation logic is pending).")
+    else:
+        # Final ELO table will be rendered here
+        st.dataframe(df_elo_1v1)
+
+
+# ======================================================
+# TAB 2: ADD MATCH
+# ======================================================
+with tab_add_match:
+    st.header("Record a New Match")
+    # Match submission forms will go here.
+
+# ======================================================
+# TAB 3: ALL MATCH DATA
+# ======================================================
+with tab_all_data:
+    st.header("Full Match History")
+
+    # 1v1
+    st.markdown("#### 1v1 Matches")
+    if df_1v1_game.empty:
+        st.info(f"No 1v1 data yet for {selected_game}.")
+    else:
+        players_game = sorted(
+            set(df_1v1_game["player1"].unique()).union(
+                set(df_1v1_game["player2"].unique())
+            )
+        )
+        
+        # Player filter
+        col_pf1, _ = st.columns(2)
+        with col_pf1:
+            player_filter = st.selectbox(
+                "Filter 1v1 by player (optional)",
+                ["(All players)"] + players_game,
+                key="all_data_player_filter",
+            )
+        
+        filtered_1v1 = df_1v1_game.copy()
+        if player_filter != "(All players)":
+            mask = (filtered_1v1["player1"] == player_filter) | (filtered_1v1["player2"] == player_filter)
+            filtered_1v1 = filtered_1v1[mask]
+
+        st.dataframe(
+            filtered_1v1.sort_values(by="date", ascending=False),
+            use_container_width=True,
         )
 
-    for col in [
-        "date",
-        "game",
-        "team1_name",
-        "team1_players",
-        "score1",
-        "result1",
-        "team2_name",
-        "team2_players",
-        "score2",
-        "result2",
-    ]:
-        if col not in df.columns:
-            df[col] = None
-
-    df["date"] = pd.to_datetime(df["date"], errors="coerce")
-    df["score1"] = pd.to_numeric(df["score1"], errors="coerce")
-    df["score2"] = pd.to_numeric(df["score2"], errors="coerce")
-
-    return df[
-        [
-            "date",
-            "game",
-            "team1_name",
-            "team1_players",
-            "score1",
-            "result1",
-            "team2_name",
-            "team2_players",
-            "score2",
-            "result2",
-        ]
-    ]
-
-
-def append_match_1v1(date, game, player1, team1, score1, player2, team2, score2):
-    # This call is safe because the client is already cached from the load functions
-    client = get_gsheet_client()
-    sheet = client.open_by_key(SPREADSHEET_ID).worksheet(WORKSHEET_1V1)
-
-    if score1 > score2:
-        result1, result2 = "W", "L"
-    elif score1 < score2:
-        result1, result2 = "L", "W"
+    # 2v2
+    st.markdown("#### 2v2 Matches")
+    if df_2v2_game.empty:
+        st.info(f"No 2v2 data yet for {selected_game}.")
     else:
-        result1 = result2 = "D"
+        teams_in_game = sorted(
+            set(df_2v2_game["team1_name"].dropna().unique()).union(
+                set(df_2v2_game["team2_name"].dropna().unique())
+            )
+        )
+        col_tf1, _ = st.columns(2)
+        with col_tf1:
+            team_filter = st.selectbox(
+                "Filter 2v2 by team (optional)",
+                ["(All teams)"] + teams_in_game,
+                key="all_data_team_filter",
+            )
+        filtered_2v2 = df_2v2_game.copy()
+        if team_filter != "(All teams)":
+            mask = (filtered_2v2["team1_name"] == team_filter) | (filtered_2v2["team2_name"] == team_filter)
+            filtered_2v2 = filtered_2v2[mask]
 
-    row = [
-        str(date),
-        game,
-        player1,
-        team1,
-        int(score1),
-        result1,
-        player2,
-        team2,
-        int(score2),
-        result2,
-    ]
-    sheet.append_row(row)
-
-
-def append_match_2v2(
-    date, game, team1_name, team1_players, score1, team2_name, team2_players, score2
-):
-    # This call is safe because the client is already cached from the load functions
-    client = get_gsheet_client()
-    sheet = client.open_by_key(SPREADSHEET_ID).worksheet(WORKSHEET_2V2)
-
-    if score1 > score2:
-        result1, result2 = "W", "L"
-    elif score1 < score2:
-        result1, result2 = "L", "W"
-    else:
-        result1 = result2 = "D"
-
-    row = [
-        str(date),
-        game,
-        team1_name,
-        team1_players,
-        int(score1),
-        result1,
-        team2_name,
-        team2_players,
-        int(score2),
-        result2,
-    ]
-    sheet.append_row(row)
-
-
-# =========================
-# ELO RATING (1v1 only)
-# =========================
-def expected_score(rating_a, rating_b):
-    return 1 / (1 + 10 ** ((rating_b - rating_a) / 400))
-
-
-def update_elo(rating_a, rating_b, score_a, k=20):
-    exp_a = expected_score(rating_a, rating_b)
-    new_a = rating_a + k * (score_a - exp_a)
-    new_b = rating_b + k * ((1 - score_a) - (1 - exp_a))
-    return new_a, new_b
-
-
-def compute_ratings_1v1(df: pd.DataFrame, game: str, base_rating=1000):
-    ratings = {}
-    if df.empty:
-        return ratings
-
-    df_game = df[df["game"] == game].copy()
-    if df_game.empty:
-        return ratings
-
-    df_game = df_game.sort_values(by="date", na_position="last")
-
-    for _, row in df_game.iterrows():
-        p1, p2 = row["player1"], row["player2"]
-        s1, s2 = row["score1"], row["score2"]
-
-        if pd.isna(p1) or pd.isna(p2) or pd.isna(s1) or pd.isna(s2):
-            continue
-
-        ratings.setdefault(p1, base_rating)
-        ratings.setdefault(p2, base_rating)
-
-        if s1 > s2:
-            score_a = 1.0
-        elif s1 < s2:
-            score_a = 0.0
-        else:
-            score_a = 0.5
-
-        new_p1, new_p2 = update_elo(ratings[p1], ratings[p2], score_a)
-        ratings[p1], ratings[p2] = new_p1, new_p2
-
-    return ratings
-
+        st.dataframe(
+            filtered_2v2.sort_values(by="date", ascending=False),
+            use_container_width=True,
+        )
 
 # =========================
 # LEADERBOARDS & STATS
