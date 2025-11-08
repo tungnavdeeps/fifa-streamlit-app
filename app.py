@@ -47,18 +47,40 @@ def get_gsheet_client():
         st.stop()
 
 def load_sheet(worksheet_name: str) -> pd.DataFrame:
-    """Loads data from a specified worksheet with retry logic."""
+    """
+    Loads data from a specified worksheet using get_all_records() for simplicity.
+    Includes a direct check for an empty result.
+    """
     client = get_gsheet_client() 
     
     MAX_RETRIES = 3
     for attempt in range(MAX_RETRIES):
         try:
             sheet = client.open_by_key(SPREADSHEET_ID).worksheet(worksheet_name)
+            
+            # --- Try the preferred get_all_records() method first ---
             records = sheet.get_all_records()
             
-            if not records:
-                return pd.DataFrame() 
-            return pd.DataFrame(records)
+            if records:
+                # If records are found, return the DataFrame immediately
+                return pd.DataFrame(records)
+            
+            # --- FALLBACK: If records is empty, check using get_all_values() ---
+            # This is a less strict check that confirms if headers and data are present
+            all_values = sheet.get_all_values()
+            
+            if len(all_values) >= 2:
+                # If we have headers (row 0) and at least one data row (row 1+)
+                headers = [col.strip().lower() for col in all_values[0]]
+                data = all_values[1:]
+                
+                # Check for length mismatch before creating DataFrame
+                if all(len(row) == len(headers) for row in data):
+                    st.warning(f"⚠️ **Loaded '{worksheet_name}' using fallback method.**")
+                    return pd.DataFrame(data, columns=headers)
+                
+            # If neither method yields usable data, raise an error or return empty
+            return pd.DataFrame() 
             
         except Exception as e:
             if attempt < MAX_RETRIES - 1:
@@ -67,7 +89,7 @@ def load_sheet(worksheet_name: str) -> pd.DataFrame:
                 st.error(f"Failed to connect to Google Sheet after {MAX_RETRIES} attempts.")
                 raise e
     
-    return pd.DataFrame() 
+    return pd.DataFrame()
 
 
 # =========================
