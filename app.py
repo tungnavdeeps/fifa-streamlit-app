@@ -78,11 +78,19 @@ def load_matches_1v1() -> pd.DataFrame:
     """Loads, cleans, and prepares 1v1 data."""
     df = load_sheet(WORKSHEET_1V1)
     if df.empty: return df
+    
+    # --- ADDED CODE: CLEAN COLUMN NAMES ---
+    # Convert all column names to lowercase and strip all leading/trailing whitespace
+    df.columns = [col.strip().lower() for col in df.columns]
+    # --- END ADDED CODE ---
+
+    # Now the rest of your original logic will work reliably:
     df['date'] = pd.to_datetime(df.get('date', pd.Series()), errors='coerce')
     df['score1'] = pd.to_numeric(df.get('score1', pd.Series()), errors='coerce').fillna(0).astype(int)
     df['score2'] = pd.to_numeric(df.get('score2', pd.Series()), errors='coerce').fillna(0).astype(int)
     
-    required_cols = ['date', 'game', 'player1', 'player2', 'score1', 'score2', 'team1', 'team2']
+    # 'game' is now guaranteed to be available if the column exists
+    required_cols = ['date', 'game', 'player1', 'player2', 'score1', 'score2', 'team1', 'team2'] 
     for col in required_cols:
         if col not in df.columns:
             df[col] = None
@@ -272,6 +280,11 @@ try:
     df_2v2 = load_matches_2v2()
 except Exception:
     # Stop execution if loading fails (handled inside load_sheet)
+    st.stop()
+
+# --- ADD THIS NEW CHECK ---
+if df_1v1.empty:
+    st.error("🛑 **1v1 Data Load Error:** The 'Matches_1v1' worksheet is either empty or failed to load records.")
     st.stop()
 
 df_1v1_game = df_1v1[df_1v1["game"] == selected_game].copy()
