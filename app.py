@@ -3,27 +3,27 @@ import pandas as pd
 import streamlit as st
 import gspread
 import time 
-import matplotlib.pyplot as plt # Needed for plots, though not currently used
+import matplotlib.pyplot as plt
 
 # =========================
 # CONFIG – EDIT THESE
 # =========================
-SPREADSHEET_ID = "1-82tJW2-y5mkt0b0qn4DPWj5sL-yOjKgCBKizUSzs9I" 
+SPREADSHEET_ID = "1-82tJW2-y5mkt0b0qn4DPj5sL-yOjKgCBKizUSzs9I" 
 WORKSHEET_1V1 = "Matches_1v1"
 WORKSHEET_2V2 = "Matches_2v2"
 
-# 🛑 THIS VARIABLE MUST BE DEFINED FIRST (Fixes NameError)
 GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
 
 
 # =========================
-# GOOGLE SHEETS HELPERS (MANUAL KEY CLEANUP FIX)
+# GOOGLE SHEETS HELPERS (ULTRA-ROBUST KEY CLEANUP)
 # =========================
 @st.cache_resource(ttl=600)
 def get_gsheet_client():
     """
     Initializes and caches the gspread client.
-    Manually cleans the private_key string to fix Streamlit corruption (\n).
+    Performs aggressive manual cleanup of the private_key string 
+    to fix Streamlit's corruption and ensure valid Base64 decoding.
     """
     SECRET_KEY = "gcp_service_account"
     
@@ -33,30 +33,46 @@ def get_gsheet_client():
 
     sa_info = dict(st.secrets[SECRET_KEY])
     
-    # CRITICAL FIX: Manually clean the private_key string
     if "private_key" in sa_info:
-        # 1. Replace literal "\n" strings (Streamlit corruption) with actual newlines
-        # This fixes the corruption caused by the secrets manager parsing the triple quotes
-        private_key = sa_info["private_key"].replace('\\n', '\n')
-        # 2. Assign the cleaned key back
-        sa_info["private_key"] = private_key
+        raw_key = sa_info["private_key"]
+        
+        # 1. Fix escaped newlines that Streamlit adds
+        private_key_fixed = raw_key.replace('\\n', '\n')
+        
+        # 2. Aggressively strip all whitespace/newlines from the actual key content
+        begin = '-----BEGIN PRIVATE KEY-----'
+        end = '-----END PRIVATE KEY-----'
+        
+        if begin in private_key_fixed and end in private_key_fixed:
+            # Split the string to isolate the Base64 content block
+            content = private_key_fixed.split(begin)[1].split(end)[0]
+            
+            # Remove ALL whitespace and newlines from the content string
+            clean_content = "".join(content.split())
+            
+            # Reconstruct the final key string exactly as gspread expects it
+            final_key = f"{begin}\n{clean_content}\n{end}\n"
+            sa_info["private_key"] = final_key.strip()
+        else:
+            # Fallback for simpler keys (though not expected here)
+            sa_info["private_key"] = private_key_fixed.strip()
     
     try:
         # Use the cleaned dictionary
         client = gspread.service_account_from_dict(sa_info)
         return client
     except Exception as e:
+        # Re-raising the error with a custom message to guide the user
         st.error(f"❌ **Authentication Failed!** Credentials rejected by Google.")
-        st.warning("Action Required: Confirm the service account is an Editor on your Google Sheet.")
-        st.exception(e) 
+        st.warning(
+            "Final Action Required: If this error persists, the *only* remaining issue is that the service account email is **not an Editor** on the Google Sheet."
+        )
+        st.exception(e)
         st.stop()
         
 
 def load_sheet(worksheet_name: str) -> pd.DataFrame:
-    """
-    Loads data from a specified worksheet with retry logic.
-    """
-    # Force client refresh every time to check connection
+    """Loads data from a specified worksheet with retry logic."""
     client = get_gsheet_client() 
     
     MAX_RETRIES = 3
@@ -266,7 +282,6 @@ st.title("🎮 FIFA Squad Tracker & Predictor")
 
 # Sidebar
 st.sidebar.markdown("### ⚙️ Settings")
-# The NameError occurs if GAME_OPTIONS is not defined before this line
 selected_game = st.sidebar.selectbox("Game version", GAME_OPTIONS)
 page = st.sidebar.radio("Go to", ["Dashboard", "Record Match", "All Data"])
 
