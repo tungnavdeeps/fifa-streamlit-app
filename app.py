@@ -1,3 +1,5 @@
+import json
+import base64
 import datetime
 import pandas as pd
 import streamlit as st
@@ -21,46 +23,13 @@ GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
 # =========================
 @st.cache_resource(ttl=600)
 def get_gsheet_client():
-    """
-    Initializes and caches the gspread client.
-    Performs the final, absolute zero-tolerance cleanup of the private_key string.
-    """
-    SECRET_KEY = "gcp_service_account"
-    
-    if SECRET_KEY not in st.secrets:
-        st.error("🛑 **Secret Key Missing!** Please configure the secret named `gcp_service_account`.")
-        st.stop()
+    # ...
+    b64_string = st.secrets["gcp_service_account"]["GCP_SA_CREDS_B64"]
+    json_bytes = base64.b64decode(b64_string.strip())
+    sa_info = json.loads(json_bytes.decode())
 
-    sa_info = dict(st.secrets[SECRET_KEY])
-    
-    if "private_key" in sa_info:
-        raw_key = sa_info["private_key"]
-        
-        # 1. Fix escaped newlines that Streamlit adds (a common corruption)
-        private_key_fixed = raw_key.replace('\\n', '\n')
-        
-        begin = '-----BEGIN PRIVATE KEY-----'
-        end = '-----END PRIVATE KEY-----'
-        
-        if begin in private_key_fixed and end in private_key_fixed:
-            # Step 2: Clean the entire string by removing ALL spaces and newlines
-            key_no_whitespace = private_key_fixed.replace(' ', '').replace('\n', '')
-            
-            # Step 3: Remove the BEGIN/END markers from the cleaned string to isolate ONLY the Base64 content
-            content_only = key_no_whitespace.replace(begin.replace(' ', ''), '').replace(end.replace(' ', ''), '')
-            
-            # Step 4: Reconstruct the key string exactly with expected markers and newlines
-            final_key = f"{begin}\n{content_only}\n{end}"
-            
-            # Step 5: Assign the zero-tolerance cleaned key, stripping any outside whitespace
-            sa_info["private_key"] = final_key.strip()
-        else:
-            sa_info["private_key"] = private_key_fixed.strip()
-    
-    try:
-        # Use the cleaned dictionary
-        client = gspread.service_account_from_dict(sa_info)
-        return client
+    client = gspread.service_account_from_dict(sa_info)
+    return client
     except Exception as e:
         # Re-raising the error with a custom message to guide the user
         st.error(f"❌ **Authentication Failed!** Credentials rejected by Google.")
