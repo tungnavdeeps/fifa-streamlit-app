@@ -23,14 +23,21 @@ GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
 # =========================
 @st.cache_resource(ttl=600)
 def get_gsheet_client():
-    # ...
-    b64_string = st.secrets["gcp_service_account"]["GCP_SA_CREDS_B64"]
-    json_bytes = base64.b64decode(b64_string.strip())
-    sa_info = json.loads(json_bytes.decode())
+    # ... (code for secret checks) ...
 
-    client = gspread.service_account_from_dict(sa_info)
-    return client
-    except Exception as e:
+    try:  # <--- MUST HAVE A TRY BLOCK HERE
+        # 1. Get the single, clean Base64 string
+        b64_string = st.secrets["gcp_service_account"]["GCP_SA_CREDS_B64"]
+        
+        # 2. Decode and load the JSON
+        json_bytes = base64.b64decode(b64_string.strip())
+        sa_info = json.loads(json_bytes.decode())
+        
+        # 3. Authenticate
+        client = gspread.service_account_from_dict(sa_info)
+        return client
+        
+    except Exception as e: # <--- THIS LINE MUST ALIGN WITH THE 'try' KEYWORD
         # Re-raising the error with a custom message to guide the user
         st.error(f"❌ **Authentication Failed!** Credentials rejected by Google.")
         st.warning(
