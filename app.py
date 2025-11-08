@@ -2,41 +2,42 @@ import datetime
 import pandas as pd
 import streamlit as st
 import gspread
-import matplotlib.pyplot as plt
 import time 
-import base64
-import json 
-from tempfile import NamedTemporaryFile 
+
+# ... (other imports)
 
 # =========================
-# CONFIG – EDIT THESE
-# =========================
-# Confirmed to be your Sheet ID
-SPREADSHEET_ID = "1-82tJW2-y5mkt0b0qn4DPWj5sL-yOjKgCBKizUSzs9I" 
-WORKSHEET_1V1 = "Matches_1v1"
-WORKSHEET_2V2 = "Matches_2v2"
-
-GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
-
-
-# =========================
-# GOOGLE SHEETS HELPERS (BULLETPROOF FILE METHOD)
+# GOOGLE SHEETS HELPERS (MANUAL KEY CLEANUP FIX)
 # =========================
 @st.cache_resource(ttl=600)
 def get_gsheet_client():
     """
-    Initializes and caches the gspread client by creating a temporary
-    service account file from a Base64-encoded full JSON secret. 
-    This is the most reliable authentication method in Streamlit Cloud.
+    Initializes and caches the gspread client.
+    Manually cleans the private_key string to fix Streamlit corruption.
     """
     SECRET_KEY = "gcp_service_account"
-    B64_KEY = "GCP_SA_CREDS_B64"
+    
+    if SECRET_KEY not in st.secrets:
+        st.error("🛑 **Secret Key Missing!** Please configure the secret named `gcp_service_account`.")
+        st.stop()
 
-    if SECRET_KEY not in st.secrets or B64_KEY not in st.secrets[SECRET_KEY]:
-        st.error(
-            "🛑 **Secret Key Missing!** Please ensure your Streamlit secret is named "
-            f"`{SECRET_KEY}` and contains the key `{B64_KEY}` with the Base64-encoded JSON."
-        )
+    sa_info = dict(st.secrets[SECRET_KEY])
+    
+    # CRITICAL FIX: Manually clean the private_key string
+    if "private_key" in sa_info:
+        # 1. Replace literal "\n" strings (Streamlit corruption) with actual newlines
+        private_key = sa_info["private_key"].replace('\\n', '\n')
+        # 2. Assign the cleaned key back
+        sa_info["private_key"] = private_key
+    
+    try:
+        # Use the cleaned dictionary
+        client = gspread.service_account_from_dict(sa_info)
+        return client
+    except Exception as e:
+        st.error(f"❌ **Authentication Failed!** Credentials rejected by Google.")
+        st.warning("Action Required: Confirm the service account is an Editor on your Google Sheet.")
+        st.exception(e) # Display the full error for any new clues
         st.stop()
 
     try:
