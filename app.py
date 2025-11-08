@@ -1,3 +1,4 @@
+import base64
 import datetime
 import pandas as pd
 import streamlit as st
@@ -23,16 +24,33 @@ GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
 @st.cache_data(ttl=60)
 def get_gsheet_client(_cache_buster=None):
     """
-    Initializes and caches the gspread client using Streamlit Secrets.
-    Uses the simplest code path to avoid parsing corruption issues.
+    Initializes and caches the gspread client.
+    Decodes the Base64-encoded private key (private_key_b64) to prevent corruption errors.
     """
     SECRET_KEY = "gcp_service_account"
     
     if SECRET_KEY not in st.secrets:
-        st.error(
-            "🛑 **Secret Key Missing!** Please ensure you have configured the Streamlit Cloud secret named "
-            f"`{SECRET_KEY}`."
-        )
+        st.error("🛑 **Secret Key Missing!** Please configure the secret named `gcp_service_account`.")
+        st.stop()
+
+    sa_info = dict(st.secrets[SECRET_KEY])
+    
+    # CRITICAL FIX: Decode the Base64 private key string
+    try:
+        if "private_key_b64" in sa_info:
+            # Decode from Base64 bytes, then to a UTF-8 string, and assign to the correct key "private_key".
+            private_key = base64.b64decode(sa_info["private_key_b64"]).decode('utf-8')
+            sa_info["private_key"] = private_key
+            # Remove the temporary b64 key for clean dictionary
+            del sa_info["private_key_b64"]
+        
+        # Now use the clean dictionary
+        client = gspread.service_account_from_dict(sa_info)
+        return client
+    except Exception as e:
+        # This will now only fail if the Base64 string is incorrect OR the GSheet isn't shared
+        st.error(f"❌ **Authentication Failed!** Credentials rejected by Google.")
+        st.warning("Action Required: Double-check your Base64 string and ensure the service account is an Editor on your Google Sheet.")
         st.stop()
 
     try:
