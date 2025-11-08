@@ -3,8 +3,18 @@ import pandas as pd
 import streamlit as st
 import gspread
 import time 
+import matplotlib.pyplot as plt # Needed for plots, though not currently used
 
-# ... (other imports)
+# =========================
+# CONFIG – EDIT THESE
+# =========================
+SPREADSHEET_ID = "1-82tJW2-y5mkt0b0qn4DPWj5sL-yOjKgCBKizUSzs9I" 
+WORKSHEET_1V1 = "Matches_1v1"
+WORKSHEET_2V2 = "Matches_2v2"
+
+# 🛑 THIS VARIABLE MUST BE DEFINED FIRST (Fixes NameError)
+GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
+
 
 # =========================
 # GOOGLE SHEETS HELPERS (MANUAL KEY CLEANUP FIX)
@@ -13,7 +23,7 @@ import time
 def get_gsheet_client():
     """
     Initializes and caches the gspread client.
-    Manually cleans the private_key string to fix Streamlit corruption.
+    Manually cleans the private_key string to fix Streamlit corruption (\n).
     """
     SECRET_KEY = "gcp_service_account"
     
@@ -26,6 +36,7 @@ def get_gsheet_client():
     # CRITICAL FIX: Manually clean the private_key string
     if "private_key" in sa_info:
         # 1. Replace literal "\n" strings (Streamlit corruption) with actual newlines
+        # This fixes the corruption caused by the secrets manager parsing the triple quotes
         private_key = sa_info["private_key"].replace('\\n', '\n')
         # 2. Assign the cleaned key back
         sa_info["private_key"] = private_key
@@ -37,38 +48,15 @@ def get_gsheet_client():
     except Exception as e:
         st.error(f"❌ **Authentication Failed!** Credentials rejected by Google.")
         st.warning("Action Required: Confirm the service account is an Editor on your Google Sheet.")
-        st.exception(e) # Display the full error for any new clues
+        st.exception(e) 
         st.stop()
-
-    try:
-        # 1. Decode the Base64 string to get the JSON content
-        creds_json_text = base64.b64decode(st.secrets[SECRET_KEY][B64_KEY]).decode('utf-8')
         
-        # 2. Write the JSON content to a temporary file
-        # We use NamedTemporaryFile to ensure the file is created on disk
-        with NamedTemporaryFile(mode='w', delete=False) as temp_file:
-            temp_file.write(creds_json_text)
-            temp_file_path = temp_file.name
-        
-        # 3. Authenticate using the file path (gspread's most reliable method)
-        client = gspread.service_account(filename=temp_file_path)
-        return client
-    
-    except Exception as e:
-        # Final catch for authentication failures
-        st.error(f"❌ **Authentication Failed!** Credentials rejected by Google.")
-        st.warning(
-            "Final Action Required: Please confirm you **Base64-encoded the entire service account JSON file** "
-            "and that the service account email is an **Editor** on the Google Sheet."
-        )
-        st.exception(e)
-        st.stop()
-
 
 def load_sheet(worksheet_name: str) -> pd.DataFrame:
     """
     Loads data from a specified worksheet with retry logic.
     """
+    # Force client refresh every time to check connection
     client = get_gsheet_client() 
     
     MAX_RETRIES = 3
@@ -93,7 +81,6 @@ def load_sheet(worksheet_name: str) -> pd.DataFrame:
 
 # =========================
 # DATA LOADING AND CLEANING
-# (All previously confirmed working logic)
 # =========================
 
 def load_matches_1v1() -> pd.DataFrame:
@@ -279,6 +266,7 @@ st.title("🎮 FIFA Squad Tracker & Predictor")
 
 # Sidebar
 st.sidebar.markdown("### ⚙️ Settings")
+# The NameError occurs if GAME_OPTIONS is not defined before this line
 selected_game = st.sidebar.selectbox("Game version", GAME_OPTIONS)
 page = st.sidebar.radio("Go to", ["Dashboard", "Record Match", "All Data"])
 
@@ -288,8 +276,7 @@ if st.sidebar.button("Clear Streamlit Data Cache"):
     st.rerun()
 
 
-# Load Data (This is the critical step that relies on the new function)
-# The application will fail here if authentication is not successful
+# Load Data (The authentication happens here)
 try:
     df_1v1 = load_matches_1v1()
     df_2v2 = load_matches_2v2()
