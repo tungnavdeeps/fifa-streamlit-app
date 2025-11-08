@@ -8,7 +8,8 @@ import matplotlib.pyplot as plt
 # =========================
 # CONFIG – EDIT THESE
 # =========================
-SPREADSHEET_ID = "1-82tJW2-y5mkt0b0qn4DPj5sL-yOjKgCBKizUSzs9I" 
+# Confirmed to be your Sheet ID
+SPREADSHEET_ID = "1-82tJW2-y5mkt0b0qn4DPWj5sL-yOjKgCBKizUSzs9I" 
 WORKSHEET_1V1 = "Matches_1v1"
 WORKSHEET_2V2 = "Matches_2v2"
 
@@ -23,7 +24,7 @@ def get_gsheet_client():
     """
     Initializes and caches the gspread client.
     Performs the most aggressive manual cleanup possible of the private_key string 
-    to fix Streamlit's corruption and ensure valid Base64 decoding.
+    to fix Streamlit's corruption and eliminate all stray whitespace/bytes.
     """
     SECRET_KEY = "gcp_service_account"
     
@@ -36,26 +37,36 @@ def get_gsheet_client():
     if "private_key" in sa_info:
         raw_key = sa_info["private_key"]
         
-        # 1. Fix escaped newlines that Streamlit adds
-        private_key_fixed = raw_key.replace('\\n', '\n')
+        # 1. CRITICAL: Aggressively strip all leading/trailing whitespace/non-printable chars 
+        # from the raw secret value read from Streamlit. This targets the 'Unused bytes' error.
+        stripped_key = raw_key.strip()
         
+        # 2. Fix escaped newlines that Streamlit adds (\n becomes an actual newline)
+        private_key_fixed = stripped_key.replace('\\n', '\n')
+        
+        # 3. Aggressive Internal Cleanup
         begin = '-----BEGIN PRIVATE KEY-----'
         end = '-----END PRIVATE KEY-----'
         
         if begin in private_key_fixed and end in private_key_fixed:
-            # Split the string to isolate the raw Base64 content
-            content = private_key_fixed.split(begin)[1].split(end)[0]
-            
-            # Remove ALL whitespace and newlines from the Base64 content string
-            clean_content = "".join(content.split())
-            
-            # Reconstruct the final key string exactly with expected markers and explicit newlines
-            final_key = f"{begin}\n{clean_content}\n{end}" # Note: removed the trailing \n
-            
-            # Apply a final, global strip to remove any lingering outside whitespace
-            sa_info["private_key"] = final_key.strip()
+            try:
+                # Use splitlines() to get a list of lines, filtering out empty ones
+                lines = [line.strip() for line in private_key_fixed.splitlines() if line.strip()]
+
+                # Isolate the Base64 content by removing BEGIN/END markers
+                content_lines = [line for line in lines if line != begin and line != end]
+
+                # Join the clean content lines without any spaces in between
+                clean_content = "".join(content_lines)
+
+                # Reconstruct the final key string with required markers and newlines
+                final_key = f"{begin}\n{clean_content}\n{end}"
+                
+                sa_info["private_key"] = final_key # Final result is assigned
+            except Exception:
+                # Fallback in case the splitting failed, but still apply basic cleanup
+                sa_info["private_key"] = private_key_fixed.strip()
         else:
-            # Fallback (shouldn't happen with the correct secret structure)
             sa_info["private_key"] = private_key_fixed.strip()
     
     try:
