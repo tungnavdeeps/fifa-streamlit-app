@@ -171,7 +171,7 @@ def load_matches_2v2() -> pd.DataFrame:
 
 def append_match_1v1(date, game, player1, team1, score1, player2, team2, score2):
     client = get_gsheet_client()
-    sheet = client.open_by_key(SPREADSHEET_ID).worksheet(WORKSHEET_1V1)
+    sheet = client.open_by_url(SPREADSHEET_ID).worksheet(WORKSHEET_1V1)
 
     if score1 > score2:
         result1, result2 = "W", "L"
@@ -189,7 +189,7 @@ def append_match_1v1(date, game, player1, team1, score1, player2, team2, score2)
 
 def append_match_2v2(date, game, team1_name, team1_players, score1, team2_name, team2_players, score2):
     client = get_gsheet_client()
-    sheet = client.open_by_key(SPREADSHEET_ID).worksheet(WORKSHEET_2V2)
+    sheet = client.open_by_url(SPREADSHEET_ID).worksheet(WORKSHEET_2V2)
 
     if score1 > score2:
         result1, result2 = "W", "L"
