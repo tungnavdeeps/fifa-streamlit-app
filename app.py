@@ -1158,7 +1158,7 @@ elif page == "Head-to-Head (1v1)":
                 games_p1, gf_p1, ga_p1 = compute_goals_vs_opponent(h2h_df, p1)
                 games_p2, gf_p2, ga_p2 = compute_goals_vs_opponent(h2h_df, p2)
 
-                # ---------- NEW: Rivalry summary + wins bar chart ----------
+                # ---------- text summary ----------
                 total_games = len(h2h_df)
                 if total_games > 0:
                     total_goals_p1 = gf_p1
@@ -1174,16 +1174,6 @@ elif page == "Head-to-Head (1v1)":
                         f"**{goal_diff_p1:+d}** ({total_goals_p1}–{total_goals_p2})."
                     )
 
-                    st.markdown("#### Result breakdown")
-                    fig_res, ax_res = plt.subplots()
-                    categories = [p1, p2, "Draws"]
-                    values = [wins_p1, wins_p2, draws]
-                    ax_res.bar(categories, values)
-                    ax_res.set_ylabel("Games")
-                    ax_res.set_title("Wins / draws in this matchup")
-                    st.pyplot(fig_res)
-
-                # ---------- original goals summary ----------
                 if games_p1 > 0 and games_p2 > 0:
                     st.markdown("#### Goals in this matchup")
                     colG1, colG2 = st.columns(2)
@@ -1200,57 +1190,7 @@ elif page == "Head-to-Head (1v1)":
                             f"(_avg {gf_p2/games_p2:.2f} scored, {ga_p2/games_p2:.2f} conceded_)."
                         )
 
-                # ---------- NEW: Goal margin distribution ----------
-                st.markdown("#### Goal margin distribution")
-                goal_margins = (h2h_df["score1"] - h2h_df["score2"]).abs()
-                margin_counts = goal_margins.value_counts().sort_index()
-
-                if not margin_counts.empty:
-                    fig_margin, ax_margin = plt.subplots()
-                    ax_margin.bar(
-                        [str(int(m)) for m in margin_counts.index],
-                        margin_counts.values,
-                    )
-                    ax_margin.set_xlabel("Goal margin")
-                    ax_margin.set_ylabel("Number of games")
-                    ax_margin.set_title("How often games are decided by 0, 1, 2+ goals")
-                    st.pyplot(fig_margin)
-
-                # ---------- NEW: Goals over time ----------
-                st.markdown("#### Goals over time")
-
-                h2h_plot = h2h_df.copy()
-                if "date" in h2h_plot.columns:
-                    h2h_plot = h2h_plot.sort_values("date")
-                    x_vals = h2h_plot["date"]
-                    x_label = "Match date"
-                else:
-                    h2h_plot = h2h_plot.reset_index(drop=True)
-                    x_vals = h2h_plot.index
-                    x_label = "Match index"
-
-                goals_series_p1 = []
-                goals_series_p2 = []
-
-                for _, row_plot in h2h_plot.iterrows():
-                    if row_plot["player1"] == p1:
-                        goals_series_p1.append(row_plot["score1"])
-                        goals_series_p2.append(row_plot["score2"])
-                    else:
-                        goals_series_p1.append(row_plot["score2"])
-                        goals_series_p2.append(row_plot["score1"])
-
-                if len(goals_series_p1) > 0:
-                    fig_time, ax_time = plt.subplots()
-                    ax_time.plot(x_vals, goals_series_p1, marker="o", label=p1)
-                    ax_time.plot(x_vals, goals_series_p2, marker="o", label=p2)
-                    ax_time.set_xlabel(x_label)
-                    ax_time.set_ylabel("Goals scored")
-                    ax_time.set_title("Goals scored by each player over time")
-                    ax_time.legend()
-                    st.pyplot(fig_time)
-
-                # ---------- existing teams + match history ----------
+                # ---------- teams + history (stay above charts) ----------
                 st.markdown("#### Teams used in this matchup")
 
                 team_stats_p1 = summarize_team_stats_vs_opponent(h2h_df, p1)
@@ -1321,6 +1261,83 @@ elif page == "Head-to-Head (1v1)":
                     use_container_width=True,
                 )
 
+                # =========================
+                #  COMPACT VISUALS AT BOTTOM
+                # =========================
+                st.markdown("#### Visual breakdown")
+
+                # Wrap all charts in an expander so they feel lighter
+                with st.expander("Show charts", expanded=True):
+                    # --- small helper for transparent figs ---
+                    def _make_fig():
+                        fig, ax = plt.subplots(figsize=(5, 3))
+                        # transparent background so it blends with Streamlit theme
+                        fig.patch.set_alpha(0.0)
+                        ax.set_facecolor("none")
+                        return fig, ax
+
+                    # Result breakdown + goal margin side-by-side
+                    colC1, colC2 = st.columns(2)
+
+                    # Result breakdown
+                    with colC1:
+                        fig_res, ax_res = _make_fig()
+                        categories = [p1, p2, "Draws"]
+                        values = [wins_p1, wins_p2, draws]
+                        ax_res.bar(categories, values)
+                        ax_res.set_ylabel("Games")
+                        ax_res.set_title("Wins / draws")
+                        st.pyplot(fig_res, use_container_width=True)
+
+                    # Goal margin distribution
+                    with colC2:
+                        goal_margins = (h2h_df["score1"] - h2h_df["score2"]).abs()
+                        margin_counts = goal_margins.value_counts().sort_index()
+
+                        if not margin_counts.empty:
+                            fig_margin, ax_margin = _make_fig()
+                            ax_margin.bar(
+                                [str(int(m)) for m in margin_counts.index],
+                                margin_counts.values,
+                            )
+                            ax_margin.set_xlabel("Goal margin")
+                            ax_margin.set_ylabel("Games")
+                            ax_margin.set_title("Scoreline spread")
+                            st.pyplot(fig_margin, use_container_width=True)
+
+                    # Goals over time – full width but compact height
+                    h2h_plot = h2h_df.copy()
+                    if "date" in h2h_plot.columns:
+                        h2h_plot = h2h_plot.sort_values("date")
+                        x_vals = h2h_plot["date"]
+                        x_label = "Match date"
+                    else:
+                        h2h_plot = h2h_plot.reset_index(drop=True)
+                        x_vals = h2h_plot.index
+                        x_label = "Match index"
+
+                    goals_series_p1 = []
+                    goals_series_p2 = []
+
+                    for _, row_plot in h2h_plot.iterrows():
+                        if row_plot["player1"] == p1:
+                            g1, g2 = row_plot["score1"], row_plot["score2"]
+                        else:
+                            g1, g2 = row_plot["score2"], row_plot["score1"]
+                        goals_series_p1.append(g1)
+                        goals_series_p2.append(g2)
+
+                    if len(goals_series_p1) > 0:
+                        fig_time, ax_time = _make_fig()
+                        ax_time.plot(x_vals, goals_series_p1, marker="o", label=p1)
+                        ax_time.plot(x_vals, goals_series_p2, marker="o", label=p2)
+                        ax_time.set_xlabel(x_label)
+                        ax_time.set_ylabel("Goals")
+                        ax_time.set_title("Goals per match over time")
+                        ax_time.legend()
+                        st.pyplot(fig_time, use_container_width=True)
+
+            # ---------- Win prediction (unchanged) ----------
             st.markdown("---")
             st.markdown("### Win Prediction (for next 1v1)")
 
