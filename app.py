@@ -3,7 +3,7 @@ import datetime
 import pandas as pd
 import streamlit as st
 import gspread
-import matplotlib.pyplot as plt
+from google.oauth2.service_account import Credentials
 
 
 # =========================
@@ -17,9 +17,6 @@ SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1-82tJW2-y5mkt0b0qn4DP
 WORKSHEET_1V1 = "Matches_1v1"
 WORKSHEET_2V2 = "Matches_2v2"
 
-# Service account JSON file in the same folder as app.py
-CREDENTIALS_FILE = "google_credentials.json"
-
 # Game versions
 GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
 
@@ -27,10 +24,18 @@ GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
 # GOOGLE SHEETS HELPERS
 # =========================
 
-@st.cache_data(ttl=60)
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+
+@st.cache_resource
 def get_gsheet_client():
-    """Create and cache a gspread client using the service account JSON."""
-    client = gspread.service_account(filename=CREDENTIALS_FILE)
+    """
+    Create and cache a gspread client using credentials stored in Streamlit secrets.
+    """
+    creds_info = st.secrets["gcp_service_account"]  # matches [gcp_service_account] in secrets.toml
+    creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
+    client = gspread.authorize(creds)
     return client
 
 
@@ -53,25 +58,30 @@ def load_sheet(worksheet_name: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def load_matches_1v1() -> pd.DataFrame:
-    """
-    1v1 sheet columns:
-    date, game, player1, team1, score1, result1, player2, team2, score2, result2
-    """
-    df = load_sheet(WORKSHEET_1V1)
+def append_match_1v1(date, game, player1, team1, score1, player2, team2, score2):
+    client = get_gsheet_client()
+    sheet = client.open_by_url(SPREADSHEET_URL).worksheet(WORKSHEET_1V1)
 
-    expected_cols = [
-        "date",
-        "game",
-        "player1",
-        "team1",
-        "score1",
-        "result1",
-        "player2",
-        "team2",
-        "score2",
-        "result2",
+    if score1 > score2:
+        result1, result2 = "W", "L"
+    elif score1 < score2:
+        result1, result2 = "L", "W"
+    else:
+        result1 = result2 = "D"
+
+    row = [
+        str(date),
+        game,
+        player1,
+        team1,
+        int(score1),
+        result1,
+        player2,
+        team2,
+        int(score2),
+        result2,
     ]
+    sheet.append_row(row)
 
     if df.empty:
         return pd.DataFrame(columns=expected_cols)
@@ -93,26 +103,32 @@ def load_matches_1v1() -> pd.DataFrame:
     return df[expected_cols]
 
 
-def load_matches_2v2() -> pd.DataFrame:
-    """
-    2v2 sheet columns:
-    date, game, team1_name, team1_players, score1, result1,
-          team2_name, team2_players, score2, result2
-    """
-    df = load_sheet(WORKSHEET_2V2)
+def append_match_2v2(
+    date, game, team1_name, team1_players, score1, team2_name, team2_players, score2
+):
+    client = get_gsheet_client()
+    sheet = client.open_by_url(SPREADSHEET_URL).worksheet(WORKSHEET_2V2)
 
-    expected_cols = [
-        "date",
-        "game",
-        "team1_name",
-        "team1_players",
-        "score1",
-        "result1",
-        "team2_name",
-        "team2_players",
-        "score2",
-        "result2",
+    if score1 > score2:
+        result1, result2 = "W", "L"
+    elif score1 < score2:
+        result1, result2 = "L", "W"
+    else:
+        result1 = result2 = "D"
+
+    row = [
+        str(date),
+        game,
+        team1_name,
+        team1_players,
+        int(score1),
+        result1,
+        team2_name,
+        team2_players,
+        int(score2),
+        result2,
     ]
+    sheet.append_row(row)
 
     if df.empty:
         return pd.DataFrame(columns=expected_cols)
@@ -485,6 +501,48 @@ def summarize_team_stats_vs_opponent(h2h_df: pd.DataFrame, player: str) -> pd.Da
 # =========================
 # UTILS FOR INPUT UI
 # =========================
+
+df_1v1 = load_matches_1v1()
+df_2v2 = load_matches_2v2()
+
+EXPECTED_1V1_COLS = [
+    "date",
+    "game",
+    "player1",
+    "team1",
+    "score1",
+    "result1",
+    "player2",
+    "team2",
+    "score2",
+    "result2",
+]
+EXPECTED_2V2_COLS = [
+    "date",
+    "game",
+    "team1_name",
+    "team1_players",
+    "score1",
+    "result1",
+    "team2_name",
+    "team2_players",
+    "score2",
+    "result2",
+]
+
+for col in EXPECTED_1V1_COLS:
+    if col not in df_1v1.columns:
+        df_1v1[col] = None
+
+for col in EXPECTED_2V2_COLS:
+    if col not in df_2v2.columns:
+        df_2v2[col] = None
+
+df_1v1 = df_1v1[EXPECTED_1V1_COLS]
+df_2v2 = df_2v2[EXPECTED_2V2_COLS]
+
+df_1v1_game = df_1v1[df_1v1["game"] == selected_game].copy()
+df_2v2_game = df_2v2[df_2v2["game"] == selected_game].copy()
 
 def player_input_block(label, existing_players, key_prefix):
     """
