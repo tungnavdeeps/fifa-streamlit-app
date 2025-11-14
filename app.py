@@ -630,7 +630,7 @@ st.sidebar.markdown("### ⚙️ Settings")
 selected_game = st.sidebar.selectbox("Game version", GAME_OPTIONS)
 page = st.sidebar.radio(
     "Go to",
-    ["Dashboard", "Record Match", "Head-to-Head (1v1)", "Head-to-Head (2v2)", Head-to-Head (2v1)", "All Data"],
+    ["Dashboard", "Record Match", "Head-to-Head (1v1)", "Head-to-Head (2v2)", "Head-to-Head (2v1)", "All Data"],
 )
 
 )
