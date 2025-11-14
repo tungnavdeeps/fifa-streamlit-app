@@ -633,8 +633,6 @@ page = st.sidebar.radio(
     ["Dashboard", "Record Match", "Head-to-Head (1v1)", "Head-to-Head (2v2)", "Head-to-Head (2v1)", "All Data"],
 )
 
-)
-
             # =========================
             # CACHED DATA LOADER (REDUCE QUOTA)
             # =========================
