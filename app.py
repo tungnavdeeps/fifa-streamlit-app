@@ -6,6 +6,20 @@ import matplotlib.pyplot as plt
 
 from google.oauth2.service_account import Credentials
 
+# ---- GLOBAL DARK THEME FOR CHARTS ----
+plt.style.use("dark_background")
+plt.rcParams.update({
+    "text.color": "white",
+    "axes.labelcolor": "white",
+    "axes.titlecolor": "white",
+    "xtick.color": "white",
+    "ytick.color": "white",
+    "axes.edgecolor": "white",
+    "figure.facecolor": "black",
+    "axes.facecolor": "black",
+    "legend.facecolor": "black",
+    "legend.edgecolor": "white",
+})
 
 # =========================
 # CONFIG – EDIT THESE
