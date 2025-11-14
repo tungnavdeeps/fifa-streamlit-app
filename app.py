@@ -1,8 +1,9 @@
 import datetime
-
 import pandas as pd
 import streamlit as st
 import gspread
+import matplotlib.pyplot as plt
+
 from google.oauth2.service_account import Credentials
 
 
@@ -21,7 +22,7 @@ WORKSHEET_2V2 = "Matches_2v2"
 GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
 
 # =========================
-# GOOGLE SHEETS HELPERS
+# GOOGLE SHEETS AUTH
 # =========================
 
 SCOPES = [
