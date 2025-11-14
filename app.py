@@ -170,8 +170,8 @@ def load_matches_2v1() -> pd.DataFrame:
         "team1_players",
         "score1",
         "result1",
-        "team2_name",
-        "team2_players",
+        "team2",
+        "player2",
         "score2",
         "result2",
     ]:
