@@ -59,7 +59,7 @@ def load_sheet(worksheet_name: str) -> pd.DataFrame:
         st.warning(f"⚠️ Could not load worksheet '{worksheet_name}': {e}")
         return pd.DataFrame()
 
-ddef append_match_1v1(date, game, player1, team1, score1, player2, team2, score2):
+def append_match_1v1(date, game, player1, team1, score1, player2, team2, score2):
     client = get_gsheet_client()
     sheet = client.open_by_url(SPREADSHEET_URL).worksheet(WORKSHEET_1V1)
 
