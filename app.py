@@ -138,64 +138,43 @@ def load_matches_2v2() -> pd.DataFrame:
 
 def load_matches_2v1() -> pd.DataFrame:
     """
-    2v1 sheet columns:
-    date, game, team1_name, team1_players, score1, result1,
-          team2_name, team2_players, score2, result2
+    Load 2v1 matches from the Matches_2v1 sheet and normalize columns/types.
 
     Convention:
     - team1_name / team1_players = the 2-player side (e.g. "Sue & Alex")
     - team2_name / team2_players = the solo side (e.g. "Jordan")
     """
-    df = load_sheet(WORKSHEET_2V1)
-    if df.empty:
-        return pd.DataFrame(
-            columns=[
-                "date",
-                "game",
-                "team1_name",
-                "team1_players",
-                "score1",
-                "result1",
-                "team2_name",
-                "team2_players",
-                "score2",
-                "result2",
-            ]
-        )
-
-    for col in [
+    expected_cols = [
         "date",
         "game",
         "team1_name",
         "team1_players",
         "score1",
         "result1",
-        "team2",
-        "player2",
+        "team2_name",
+        "team2_players",
         "score2",
         "result2",
-    ]:
+    ]
+
+    df = load_sheet(WORKSHEET_2V1)
+    if df.empty:
+        return pd.DataFrame(columns=expected_cols)
+
+    # Normalize headers
+    df.columns = [c.strip().lower() for c in df.columns]
+
+    # Ensure all expected columns exist
+    for col in expected_cols:
         if col not in df.columns:
             df[col] = None
 
+    # Types
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df["score1"] = pd.to_numeric(df["score1"], errors="coerce")
     df["score2"] = pd.to_numeric(df["score2"], errors="coerce")
 
-    return df[
-        [
-            "date",
-            "game",
-            "team1_name",
-            "team1_players",
-            "score1",
-            "result1",
-            "team2_name",
-            "team2_players",
-            "score2",
-            "result2",
-        ]
-    ]
+    return df[expected_cols]
 
 def append_match_1v1(date, game, player1, team1, score1, player2, team2, score2):
     """Append a new 1v1 match row into the Matches_1v1 sheet."""
@@ -265,8 +244,7 @@ def append_match_2v1(
     - team2_* = the solo side (team2_players can just be the player's name)
     """
     client = get_gsheet_client()
-    # If you're using open_by_url now, adapt this to that:
-    sheet = client.open_by_key(SPREADSHEET_ID).worksheet(WORKSHEET_2V1)
+    sheet = client.open_by_url(SPREADSHEET_URL).worksheet(WORKSHEET_2V1)
 
     if score1 > score2:
         result1, result2 = "W", "L"
@@ -616,8 +594,6 @@ def player_input_block(label, existing_players, key_prefix):
     # Nothing chosen
     return ""
 
-
-
 # =========================
 # STREAMLIT UI
 # =========================
@@ -633,19 +609,21 @@ page = st.sidebar.radio(
     ["Dashboard", "Record Match", "Head-to-Head (1v1)", "Head-to-Head (2v2)", "Head-to-Head (2v1)", "All Data"],
 )
 
-            # =========================
-            # CACHED DATA LOADER (REDUCE QUOTA)
-            # =========================
-            @st.cache_data(ttl=600)
-            def load_all_data():
-                """
-                Load all match types from Google Sheets, cached to reduce quota usage.
-                """
-                df1 = load_matches_1v1()
-                df2 = load_matches_2v2()
-                df3 = load_matches_2v1()
-                return df1, df2, df3
+# =========================
+# CACHED DATA LOADER (REDUCE QUOTA)
+# =========================
+@st.cache_data(ttl=600)
+def load_all_data():
+    """
+    Load all match types from Google Sheets, cached to reduce quota usage.
+    """
+    df1 = load_matches_1v1()
+    df2 = load_matches_2v2()
+    df3 = load_matches_2v1()
+    return df1, df2, df3
 
+# Use the cached loader once per run
+df_1v1, df_2v2, df_2v1 = load_all_data()
 
 # Extra safety on frames – ensure expected columns exist
 EXPECTED_1V1_COLS = [
@@ -686,6 +664,7 @@ df_2v2 = df_2v2[EXPECTED_2V2_COLS]
 
 df_1v1_game = df_1v1[df_1v1["game"] == selected_game].copy()
 df_2v2_game = df_2v2[df_2v2["game"] == selected_game].copy()
+df_2v1_game = df_2v1[df_2v1["game"] == selected_game].copy()
 
 players_all = sorted(
     set(df_1v1["player1"].dropna().unique()).union(
@@ -697,7 +676,6 @@ players_game = sorted(
         set(df_1v1_game["player2"].dropna().unique())
     )
 )
-
 
 # ---------- PAGE: DASHBOARD ----------
 if page == "Dashboard":
