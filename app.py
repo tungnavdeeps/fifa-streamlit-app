@@ -208,6 +208,8 @@ def append_match_2v2(
     ]
     sheet.append_row(row)
 
+st.write("Secrets keys:", list(st.secrets.keys()))
+
 # =========================
 # ELO RATING (1v1 only)
 # =========================
