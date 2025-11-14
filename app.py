@@ -59,36 +59,31 @@ def load_sheet(worksheet_name: str) -> pd.DataFrame:
         st.warning(f"⚠️ Could not load worksheet '{worksheet_name}': {e}")
         return pd.DataFrame()
 
-def append_match_1v1(date, game, player1, team1, score1, player2, team2, score2):
-    client = get_gsheet_client()
-    sheet = client.open_by_url(SPREADSHEET_URL).worksheet(WORKSHEET_1V1)
-
-    if score1 > score2:
-        result1, result2 = "W", "L"
-    elif score1 < score2:
-        result1, result2 = "L", "W"
-    else:
-        result1 = result2 = "D"
-
-    row = [
-        str(date),
-        game,
-        player1,
-        team1,
-        int(score1),
-        result1,
-        player2,
-        team2,
-        int(score2),
-        result2,
+def load_matches_1v1() -> pd.DataFrame:
+    """
+    Load 1v1 matches from the Matches_1v1 sheet and normalize columns/types.
+    Expected columns:
+        date, game, player1, team1, score1, result1,
+        player2, team2, score2, result2
+    """
+    expected_cols = [
+        "date",
+        "game",
+        "player1",
+        "team1",
+        "score1",
+        "result1",
+        "player2",
+        "team2",
+        "score2",
+        "result2",
     ]
-    sheet.append_row(row)
 
-
+    df = load_sheet(WORKSHEET_1V1)
     if df.empty:
         return pd.DataFrame(columns=expected_cols)
 
-    # Normalize column names: lower-case and strip spaces
+    # Make headers consistent (in case of minor differences)
     df.columns = [c.strip().lower() for c in df.columns]
 
     # Ensure all expected columns exist
@@ -96,60 +91,49 @@ def append_match_1v1(date, game, player1, team1, score1, player2, team2, score2)
         if col not in df.columns:
             df[col] = None
 
-    # Convert types
+    # Type conversions
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df["score1"] = pd.to_numeric(df["score1"], errors="coerce")
     df["score2"] = pd.to_numeric(df["score2"], errors="coerce")
 
-    # Return in a known column order
     return df[expected_cols]
 
 
-def append_match_2v2(
-    date, game, team1_name, team1_players, score1, team2_name, team2_players, score2
-):
-    client = get_gsheet_client()
-    sheet = client.open_by_url(SPREADSHEET_URL).worksheet(WORKSHEET_2V2)
-
-    if score1 > score2:
-        result1, result2 = "W", "L"
-    elif score1 < score2:
-        result1, result2 = "L", "W"
-    else:
-        result1 = result2 = "D"
-
-    row = [
-        str(date),
-        game,
-        team1_name,
-        team1_players,
-        int(score1),
-        result1,
-        team2_name,
-        team2_players,
-        int(score2),
-        result2,
+def load_matches_2v2() -> pd.DataFrame:
+    """
+    Load 2v2 matches from the Matches_2v2 sheet and normalize columns/types.
+    Expected columns:
+        date, game, team1_name, team1_players, score1, result1,
+              team2_name, team2_players, score2, result2
+    """
+    expected_cols = [
+        "date",
+        "game",
+        "team1_name",
+        "team1_players",
+        "score1",
+        "result1",
+        "team2_name",
+        "team2_players",
+        "score2",
+        "result2",
     ]
-    sheet.append_row(row)
 
+    df = load_sheet(WORKSHEET_2V2)
     if df.empty:
         return pd.DataFrame(columns=expected_cols)
 
-    # Normalize column names
     df.columns = [c.strip().lower() for c in df.columns]
 
-    # Ensure all expected columns exist
     for col in expected_cols:
         if col not in df.columns:
             df[col] = None
 
-    # Convert types
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df["score1"] = pd.to_numeric(df["score1"], errors="coerce")
     df["score2"] = pd.to_numeric(df["score2"], errors="coerce")
 
     return df[expected_cols]
-
 
 def append_match_1v1(date, game, player1, team1, score1, player2, team2, score2):
     """Append a new 1v1 match row into the Matches_1v1 sheet."""
@@ -207,8 +191,6 @@ def append_match_2v2(
         result2,
     ]
     sheet.append_row(row)
-
-st.write("Secrets keys:", list(st.secrets.keys()))
 
 # =========================
 # ELO RATING (1v1 only)
@@ -502,71 +484,6 @@ def summarize_team_stats_vs_opponent(h2h_df: pd.DataFrame, player: str) -> pd.Da
 
     return grouped
     
-# =========================
-# UTILS FOR INPUT UI
-# =========================
-
-df_1v1 = load_matches_1v1()
-df_2v2 = load_matches_2v2()
-
-EXPECTED_1V1_COLS = [
-    "date",
-    "game",
-    "player1",
-    "team1",
-    "score1",
-    "result1",
-    "player2",
-    "team2",
-    "score2",
-    "result2",
-]
-EXPECTED_2V2_COLS = [
-    "date",
-    "game",
-    "team1_name",
-    "team1_players",
-    "score1",
-    "result1",
-    "team2_name",
-    "team2_players",
-    "score2",
-    "result2",
-]
-
-for col in EXPECTED_1V1_COLS:
-    if col not in df_1v1.columns:
-        df_1v1[col] = None
-
-for col in EXPECTED_2V2_COLS:
-    if col not in df_2v2.columns:
-        df_2v2[col] = None
-
-df_1v1 = df_1v1[EXPECTED_1V1_COLS]
-df_2v2 = df_2v2[EXPECTED_2V2_COLS]
-
-df_1v1_game = df_1v1[df_1v1["game"] == selected_game].copy()
-df_2v2_game = df_2v2[df_2v2["game"] == selected_game].copy()
-
-def player_input_block(label, existing_players, key_prefix):
-    """
-    Helper: dropdown of existing players + optional "new player" text box.
-    Returns the chosen player name (or empty string).
-    """
-    options = ["-- Select existing --"] + sorted(existing_players)
-    selected = st.selectbox(
-        f"{label} (existing)", options, key=f"{key_prefix}_select"
-    )
-    new_name = st.text_input(
-        f"{label} (new, if not in list)", key=f"{key_prefix}_new"
-    ).strip()
-
-    if new_name:
-        return new_name
-    if selected != "-- Select existing --":
-        return selected
-    return ""
-
 # =========================
 # STREAMLIT UI
 # =========================
