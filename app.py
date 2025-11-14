@@ -27,7 +27,8 @@ GAME_OPTIONS = ["FIFA 24", "FIFA 25", "FIFA 26"]
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
-
+]
+    
 @st.cache_resource
 def get_gsheet_client():
     """
