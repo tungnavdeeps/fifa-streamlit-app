@@ -49,18 +49,17 @@ def load_sheet(worksheet_name: str) -> pd.DataFrame:
     """
     try:
         client = get_gsheet_client()
+        # Use the full URL, not an ID
         sheet = client.open_by_url(SPREADSHEET_URL).worksheet(worksheet_name)
         records = sheet.get_all_records()
         if not records:
             return pd.DataFrame()
         return pd.DataFrame(records)
     except Exception as e:
-        # Don’t crash the whole app – just log & return empty
         st.warning(f"⚠️ Could not load worksheet '{worksheet_name}': {e}")
         return pd.DataFrame()
 
-
-def append_match_1v1(date, game, player1, team1, score1, player2, team2, score2):
+ddef append_match_1v1(date, game, player1, team1, score1, player2, team2, score2):
     client = get_gsheet_client()
     sheet = client.open_by_url(SPREADSHEET_URL).worksheet(WORKSHEET_1V1)
 
@@ -84,6 +83,7 @@ def append_match_1v1(date, game, player1, team1, score1, player2, team2, score2)
         result2,
     ]
     sheet.append_row(row)
+
 
     if df.empty:
         return pd.DataFrame(columns=expected_cols)
