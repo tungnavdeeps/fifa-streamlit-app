@@ -483,7 +483,42 @@ def summarize_team_stats_vs_opponent(h2h_df: pd.DataFrame, player: str) -> pd.Da
     ).reset_index()
 
     return grouped
-    
+
+# =========================
+# UTILS FOR INPUT UI
+# =========================
+def player_input_block(label, existing_players, key_prefix):
+    """
+    Helper for the Record Match page:
+    - Shows a dropdown of existing players.
+    - Also lets you type a brand new player name.
+    - Returns the chosen player name (or "" if nothing is selected).
+    """
+    # Dropdown of known players
+    options = ["-- Select existing --"] + sorted(existing_players)
+    selected = st.selectbox(
+        f"{label} (existing)",
+        options,
+        key=f"{key_prefix}_select",
+    )
+
+    # Text box for a new player
+    new_name = st.text_input(
+        f"{label} (new, if not in list)",
+        key=f"{key_prefix}_new",
+    ).strip()
+
+    # If user typed a new name, use that
+    if new_name:
+        return new_name
+
+    # Otherwise, if they picked an existing one, use that
+    if selected != "-- Select existing --":
+        return selected
+
+    # Nothing chosen
+    return ""
+
 # =========================
 # STREAMLIT UI
 # =========================
