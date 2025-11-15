@@ -1356,54 +1356,54 @@ elif page == "Head-to-Head (1v1)":
                 # ----- TEAMS USED -----
                     st.markdown("#### Teams used in this matchup")
 
-    team_stats_p1 = summarize_team_stats_vs_opponent(h2h_df, p1)
-    team_stats_p2 = summarize_team_stats_vs_opponent(h2h_df, p2)
-
-    cols_team_display = [
-        "team",
-        "games",
-        "goals_for",
-        "goals_against",
-        "xg_for",
-        "xg_against",
-        "avg_goals_for",
-        "avg_goals_against",
-        "avg_xg_for",
-        "avg_xg_against",
-    ]
-
-    fmt_team = {
-        "goals_for": "{:.0f}",
-        "goals_against": "{:.0f}",
-        "xg_for": "{:.2f}",
-        "xg_against": "{:.2f}",
-        "avg_goals_for": "{:.2f}",
-        "avg_goals_against": "{:.2f}",
-        "avg_xg_for": "{:.2f}",
-        "avg_xg_against": "{:.2f}",
-    }
-
-    colT1, colT2 = st.columns(2)
-
-    with colT1:
-        st.markdown(f"**{p1} teams vs {p2}**")
-        if team_stats_p1.empty:
-            st.write("No team data recorded.")
-        else:
-            st.dataframe(
-                team_stats_p1[cols_team_display].style.format(fmt_team),
-                use_container_width=True,
-            )
-
-    with colT2:
-        st.markdown(f"**{p2} teams vs {p1}**")
-        if team_stats_p2.empty:
-            st.write("No team data recorded.")
-        else:
-            st.dataframe(
-                team_stats_p2[cols_team_display].style.format(fmt_team),
-                use_container_width=True,
-            )
+                    team_stats_p1 = summarize_team_stats_vs_opponent(h2h_df, p1)
+                    team_stats_p2 = summarize_team_stats_vs_opponent(h2h_df, p2)
+                
+                    cols_team_display = [
+                        "team",
+                        "games",
+                        "goals_for",
+                        "goals_against",
+                        "xg_for",
+                        "xg_against",
+                        "avg_goals_for",
+                        "avg_goals_against",
+                        "avg_xg_for",
+                        "avg_xg_against",
+                    ]
+                
+                    fmt_team = {
+                        "goals_for": "{:.0f}",
+                        "goals_against": "{:.0f}",
+                        "xg_for": "{:.2f}",
+                        "xg_against": "{:.2f}",
+                        "avg_goals_for": "{:.2f}",
+                        "avg_goals_against": "{:.2f}",
+                        "avg_xg_for": "{:.2f}",
+                        "avg_xg_against": "{:.2f}",
+                    }
+                
+                    colT1, colT2 = st.columns(2)
+                
+                    with colT1:
+                        st.markdown(f"**{p1} teams vs {p2}**")
+                        if team_stats_p1.empty:
+                            st.write("No team data recorded.")
+                        else:
+                            st.dataframe(
+                                team_stats_p1[cols_team_display].style.format(fmt_team),
+                                use_container_width=True,
+                            )
+                
+                    with colT2:
+                        st.markdown(f"**{p2} teams vs {p1}**")
+                        if team_stats_p2.empty:
+                            st.write("No team data recorded.")
+                        else:
+                            st.dataframe(
+                                team_stats_p2[cols_team_display].style.format(fmt_team),
+                                use_container_width=True,
+                            )
 
                 # ----- MATCH HISTORY TABLE -----
                 st.markdown("### Match history")
