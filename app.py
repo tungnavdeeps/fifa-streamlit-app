@@ -1228,7 +1228,7 @@ elif page == "Record Match":
                 st.success(f"Saved 2v1 match for {game_for_entry}! 🎉")
                 load_all_data.clear()
 
-# ---------- PAGE: HEAD-TO-HEAD (1v1) ----------
+# -----# ---------- PAGE: HEAD-TO-HEAD (1v1) ----------
 elif page == "Head-to-Head (1v1)":
     st.subheader(f"🔍 1v1 Head-to-Head – {selected_game}")
 
@@ -1247,165 +1247,199 @@ elif page == "Head-to-Head (1v1)":
 
         if p1 and p2:
             h2h_df = head_to_head_1v1(df_1v1, selected_game, p1, p2)
+
             st.markdown(f"### {p1} vs {p2} – {selected_game}")
 
             if h2h_df.empty:
                 st.info("No direct 1v1 matches between these two for this game yet.")
             else:
-                # ----- OVERALL W/D/L -----
-                wins_p1 = (
-                    ((h2h_df["player1"] == p1) & (h2h_df["score1"] > h2h_df["score2"])).sum()
-                    + ((h2h_df["player2"] == p1) & (h2h_df["score2"] > h2h_df["score1"])).sum()
-                )
-                wins_p2 = (
-                    ((h2h_df["player1"] == p2) & (h2h_df["score1"] > h2h_df["score2"])).sum()
-                    + ((h2h_df["player2"] == p2) & (h2h_df["score2"] > h2h_df["score1"])).sum()
-                )
-                draws = (h2h_df["score1"] == h2h_df["score2"]).sum()
+                # Sort chronologically for charts / last 5
+                h2h_df = h2h_df.sort_values("date").reset_index(drop=True)
+
+                # ----- CORE COUNTS & PER-MATCH ARRAYS -----
+                wins_p1 = 0
+                wins_p2 = 0
+                draws = 0
+
+                match_idx = []
+                p1_goals = []
+                p2_goals = []
+                p1_xg_list = []
+                p2_xg_list = []
+                score_diffs = []
+                goal_margins_abs = []
+
+                for i, row in h2h_df.iterrows():
+                    s1, s2 = row["score1"], row["score2"]
+                    pl1, pl2 = row["player1"], row["player2"]
+
+                    # win/draw/loss counts
+                    if s1 > s2:
+                        if pl1 == p1:
+                            wins_p1 += 1
+                        elif pl1 == p2:
+                            wins_p2 += 1
+                    elif s2 > s1:
+                        if pl2 == p1:
+                            wins_p1 += 1
+                        elif pl2 == p2:
+                            wins_p2 += 1
+                    else:
+                        draws += 1
+
+                    # From p1 perspective for charts
+                    if pl1 == p1:
+                        g_p1 = s1
+                        g_p2 = s2
+                        xg_p1 = row.get("xG1", np.nan)
+                        xg_p2 = row.get("xG2", np.nan)
+                    else:
+                        g_p1 = s2
+                        g_p2 = s1
+                        xg_p1 = row.get("xG2", np.nan)
+                        xg_p2 = row.get("xG1", np.nan)
+
+                    match_idx.append(i + 1)
+                    p1_goals.append(g_p1)
+                    p2_goals.append(g_p2)
+                    p1_xg_list.append(xg_p1)
+                    p2_xg_list.append(xg_p2)
+                    score_diffs.append(g_p1 - g_p2)
+                    if g_p1 != g_p2:
+                        goal_margins_abs.append(abs(g_p1 - g_p2))
+
                 total_games = len(h2h_df)
 
+                # Goals aggregates
+                gf_p1 = sum(p1_goals)
+                ga_p1 = sum(p2_goals)
+                gf_p2 = sum(p2_goals)
+                ga_p2 = sum(p1_goals)
+
+                avg_gf_p1 = gf_p1 / total_games if total_games else 0.0
+                avg_ga_p1 = ga_p1 / total_games if total_games else 0.0
+                avg_gf_p2 = gf_p2 / total_games if total_games else 0.0
+                avg_ga_p2 = ga_p2 / total_games if total_games else 0.0
+
+                # xG aggregates for text / radar
+                p1_xg = np.array(p1_xg_list, dtype=float)
+                p2_xg = np.array(p2_xg_list, dtype=float)
+
+                avg_xg_for_p1 = float(np.nanmean(p1_xg)) if np.any(~np.isnan(p1_xg)) else 0.0
+                avg_xg_for_p2 = float(np.nanmean(p2_xg)) if np.any(~np.isnan(p2_xg)) else 0.0
+                avg_xg_against_p1 = float(np.nanmean(p2_xg)) if np.any(~np.isnan(p2_xg)) else 0.0
+                avg_xg_against_p2 = float(np.nanmean(p1_xg)) if np.any(~np.isnan(p1_xg)) else 0.0
+
+                # ----- TOP METRICS -----
                 colL, colM, colR = st.columns(3)
                 colL.metric(f"{p1} wins", wins_p1)
                 colM.metric("Draws", draws)
                 colR.metric(f"{p2} wins", wins_p2)
 
-                # ----- GOALS & OVERALL RIVALRY SUMMARY -----
-                games_p1, gf_p1, ga_p1 = compute_goals_vs_opponent(h2h_df, p1)
-                games_p2, gf_p2, ga_p2 = compute_goals_vs_opponent(h2h_df, p2)
-
+                # ----- RIVALRY SUMMARY + LAST 5 -----
                 col_sum_left, col_sum_right = st.columns(2)
 
                 with col_sum_left:
                     st.markdown("### Rivalry summary")
-
-                    if games_p1 > 0:
-                        avg_gf_p1 = gf_p1 / games_p1
-                        avg_ga_p1 = ga_p1 / games_p1
-                    else:
-                        avg_gf_p1 = avg_ga_p1 = 0
-
-                    if games_p2 > 0:
-                        avg_gf_p2 = gf_p2 / games_p2
-                        avg_ga_p2 = ga_p2 / games_p2
-                    else:
-                        avg_gf_p2 = avg_ga_p2 = 0
-
                     st.write(
                         f"- Total games: **{total_games}**\n"
                         f"- {p1}: **{wins_p1}W {draws}D {wins_p2}L**, "
-                        f"{gf_p1} goals scored / {ga_p1} conceded "
-                        f"(avg {avg_gf_p1:.2f} for, {avg_ga_p1:.2f} against)\n"
+                        f"{gf_p1} goals / {ga_p1} conceded "
+                        f"(avg {avg_gf_p1:.2f} for, {avg_ga_p1:.2f} against, "
+                        f"xG {avg_xg_for_p1:.2f} for, {avg_xg_against_p1:.2f} against)\n"
                         f"- {p2}: **{wins_p2}W {draws}D {wins_p1}L**, "
-                        f"{gf_p2} goals scored / {ga_p2} conceded "
-                        f"(avg {avg_gf_p2:.2f} for, {avg_ga_p2:.2f} against)"
+                        f"{gf_p2} goals / {ga_p2} conceded "
+                        f"(avg {avg_gf_p2:.2f} for, {avg_ga_p2:.2f} against, "
+                        f"xG {avg_xg_for_p2:.2f} for, {avg_xg_against_p2:.2f} against)"
                     )
 
-                # ----- LAST 5 GAMES SUMMARY (RIGHT SIDE) -----
                 with col_sum_right:
                     st.markdown("### Last 5 games")
+                    last5 = h2h_df.tail(5)
+                    form_p1 = []
+                    form_p2 = []
 
-                    last5 = h2h_df.sort_values("date", ascending=False).head(5)
+                    for _, row in last5.iterrows():
+                        s1, s2 = row["score1"], row["score2"]
+                        pl1, pl2 = row["player1"], row["player2"]
 
-                    if last5.empty:
-                        st.write("Not enough match history for a last 5 summary.")
-                    else:
-                        st.write(f"Showing last **{len(last5)}** matches:")
-
-                        lines = []
-                        for _, row in last5.iterrows():
-                            if row["score1"] > row["score2"]:
-                                winner = row["player1"]
-                            elif row["score2"] > row["score1"]:
-                                winner = row["player2"]
+                        if s1 > s2:
+                            # winner is player1
+                            if pl1 == p1:
+                                form_p1.append("W")
+                                form_p2.append("L")
                             else:
-                                winner = "Draw"
-
-                            date_str = (
-                                row["date"].date().isoformat()
-                                if not pd.isna(row["date"])
-                                else "Unknown date"
-                            )
-                            lines.append(
-                                f"- **{date_str}** – "
-                                f"{row['player1']} {row['score1']}–{row['score2']} {row['player2']} "
-                                f"→ **{winner}**"
-                            )
-
-                        st.markdown("\n".join(lines))
-
-                st.markdown("---")
-
-                # ----- GOALS IN THIS MATCHUP (TEXT) -----
-                if games_p1 > 0 and games_p2 > 0:
-                    st.markdown("### Goals in this matchup")
-
-                    colG1, colG2 = st.columns(2)
-                    with colG1:
-                        st.write(
-                            f"**{p1} vs {p2}:** {gf_p1} goals scored, {ga_p1} conceded "
-                            f"in {games_p1} games "
-                            f"(_avg {gf_p1/games_p1:.2f} scored, {ga_p1/games_p1:.2f} conceded_)."
-                        )
-                    with colG2:
-                        st.write(
-                            f"**{p2} vs {p1}:** {gf_p2} goals scored, {ga_p2} conceded "
-                            f"in {games_p2} games "
-                            f"(_avg {gf_p2/games_p2:.2f} scored, {ga_p2/games_p2:.2f} conceded_)."
-                        )
-
-                # ----- TEAMS USED -----
-                    st.markdown("#### Teams used in this matchup")
-
-                    team_stats_p1 = summarize_team_stats_vs_opponent(h2h_df, p1)
-                    team_stats_p2 = summarize_team_stats_vs_opponent(h2h_df, p2)
-                
-                    cols_team_display = [
-                        "team",
-                        "games",
-                        "goals_for",
-                        "goals_against",
-                        "xg_for",
-                        "xg_against",
-                        "avg_goals_for",
-                        "avg_goals_against",
-                        "avg_xg_for",
-                        "avg_xg_against",
-                    ]
-                
-                    fmt_team = {
-                        "goals_for": "{:.0f}",
-                        "goals_against": "{:.0f}",
-                        "xg_for": "{:.2f}",
-                        "xg_against": "{:.2f}",
-                        "avg_goals_for": "{:.2f}",
-                        "avg_goals_against": "{:.2f}",
-                        "avg_xg_for": "{:.2f}",
-                        "avg_xg_against": "{:.2f}",
-                    }
-                
-                    colT1, colT2 = st.columns(2)
-                
-                    with colT1:
-                        st.markdown(f"**{p1} teams vs {p2}**")
-                        if team_stats_p1.empty:
-                            st.write("No team data recorded.")
+                                form_p1.append("L")
+                                form_p2.append("W")
+                        elif s2 > s1:
+                            # winner is player2
+                            if pl2 == p1:
+                                form_p1.append("W")
+                                form_p2.append("L")
+                            else:
+                                form_p1.append("L")
+                                form_p2.append("W")
                         else:
-                            st.dataframe(
-                                team_stats_p1[cols_team_display].style.format(fmt_team),
-                                use_container_width=True,
-                            )
-                
-                    with colT2:
-                        st.markdown(f"**{p2} teams vs {p1}**")
-                        if team_stats_p2.empty:
-                            st.write("No team data recorded.")
-                        else:
-                            st.dataframe(
-                                team_stats_p2[cols_team_display].style.format(fmt_team),
-                                use_container_width=True,
-                            )
+                            form_p1.append("D")
+                            form_p2.append("D")
 
-                # ----- MATCH HISTORY TABLE -----
+                    st.markdown(
+                        f"**Last 5 form**  \n"
+                        f"{p1}: `{'-'.join(form_p1)}`  \n"
+                        f"{p2}: `{'-'.join(form_p2)}`"
+                    )
+
+                # ----- TEAMS USED (with xG columns) -----
+                st.markdown("### Teams used in this matchup")
+
+                team_stats_p1 = summarize_team_stats_vs_opponent(h2h_df, p1)
+                team_stats_p2 = summarize_team_stats_vs_opponent(h2h_df, p2)
+
+                cols_team_display = [
+                    "team",
+                    "games",
+                    "goals_for",
+                    "goals_against",
+                    "xg_for",
+                    "xg_against",
+                    "avg_goals_for",
+                    "avg_goals_against",
+                    "avg_xg_for",
+                    "avg_xg_against",
+                ]
+                fmt_team = {
+                    "goals_for": "{:.0f}",
+                    "goals_against": "{:.0f}",
+                    "xg_for": "{:.2f}",
+                    "xg_against": "{:.2f}",
+                    "avg_goals_for": "{:.2f}",
+                    "avg_goals_against": "{:.2f}",
+                    "avg_xg_for": "{:.2f}",
+                    "avg_xg_against": "{:.2f}",
+                }
+
+                colT1, colT2 = st.columns(2)
+                with colT1:
+                    st.markdown(f"**{p1} teams vs {p2}**")
+                    if team_stats_p1.empty:
+                        st.write("No team data recorded.")
+                    else:
+                        st.dataframe(
+                            team_stats_p1[cols_team_display].style.format(fmt_team),
+                            use_container_width=True,
+                        )
+
+                with colT2:
+                    st.markdown(f"**{p2} teams vs {p1}**")
+                    if team_stats_p2.empty:
+                        st.write("No team data recorded.")
+                    else:
+                        st.dataframe(
+                            team_stats_p2[cols_team_display].style.format(fmt_team),
+                            use_container_width=True,
+                        )
+
+                # ----- MATCH HISTORY -----
                 st.markdown("### Match history")
                 st.dataframe(
                     h2h_df[
@@ -1422,208 +1456,148 @@ elif page == "Head-to-Head (1v1)":
                     use_container_width=True,
                 )
 
-                # ---------- CHARTS: rivalry visuals ----------
-            with st.expander("📊 Show charts"):
+                # ----- CHARTS IN EXPANDER -----
+                with st.expander("📊 Show charts"):
+                    # 1) Wins / draws bar
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        fig, ax = plt.subplots(figsize=(4.0, 2.3))
+                        ax.bar([p1, p2, "Draws"], [wins_p1, wins_p2, draws])
+                        ax.set_ylabel("Games")
+                        ax.set_title("Wins / draws")
+                        ax.text(
+                            0.99,
+                            0.02,
+                            "Counts of wins/draws in this head-to-head.",
+                            transform=ax.transAxes,
+                            ha="right",
+                            va="bottom",
+                            fontsize=7,
+                            color="#cccccc",
+                            alpha=0.8,
+                        )
+                        st.pyplot(fig, use_container_width=True)
+                        plt.close(fig)
 
-                # Sort matches chronologically for time-based plots
-                h2h_sorted = h2h_df.sort_values("date").reset_index(drop=True)
+                    # 2) Goal margin distribution
+                    with c2:
+                        fig2, ax2 = plt.subplots(figsize=(4.0, 2.3))
+                        # bucket 1,2,3+ (non-draws)
+                        ones = sum(1 for m in goal_margins_abs if m == 1)
+                        twos = sum(1 for m in goal_margins_abs if m == 2)
+                        big = sum(1 for m in goal_margins_abs if m >= 3)
+                        labels = ["1 goal", "2 goals", "3+ goals"]
+                        counts = [ones, twos, big]
+                        ax2.bar(labels, counts)
+                        ax2.set_ylabel("Games")
+                        ax2.set_title("Scoreline spread")
+                        ax2.text(
+                            0.99,
+                            0.02,
+                            "How often games are decided by 1, 2, or 3+ goals.",
+                            transform=ax2.transAxes,
+                            ha="right",
+                            va="bottom",
+                            fontsize=7,
+                            color="#cccccc",
+                            alpha=0.8,
+                        )
+                        st.pyplot(fig2, use_container_width=True)
+                        plt.close(fig2)
 
-                # Build per-match arrays from the perspective of p1 and p2
-                match_idx = []
-                p1_goals = []
-                p2_goals = []
-                p1_xg_list = []
-                p2_xg_list = []
-                score_diff = []  # p1 goals - p2 goals
+                    # 3) Goals & xG per match over time
+                    st.markdown("#### Goals and xG per match over time")
+                    if match_idx:
+                        fig3, ax3 = plt.subplots(figsize=(6, 2.6))
+                        ax3.plot(match_idx, p1_goals, marker="o", label=f"{p1} goals")
+                        ax3.plot(match_idx, p2_goals, marker="o", label=f"{p2} goals")
 
-                for i, row in h2h_sorted.iterrows():
-                    match_idx.append(i + 1)
+                        if np.any(~np.isnan(p1_xg)):
+                            ax3.plot(match_idx, p1_xg, marker="x", linestyle="--", label=f"{p1} xG")
+                        if np.any(~np.isnan(p2_xg)):
+                            ax3.plot(match_idx, p2_xg, marker="x", linestyle="--", label=f"{p2} xG")
 
-                    if row["player1"] == p1:
-                        g1 = row["score1"]
-                        g2 = row["score2"]
-                        xg1 = row.get("xG1", np.nan)
-                        xg2 = row.get("xG2", np.nan)
-                    else:
-                        # Row is stored as p2 vs p1, so flip
-                        g1 = row["score2"]
-                        g2 = row["score1"]
-                        xg1 = row.get("xG2", np.nan)
-                        xg2 = row.get("xG1", np.nan)
+                        ax3.set_xlabel("Match # (chronological)")
+                        ax3.set_ylabel("Goals / xG")
+                        ax3.legend(fontsize=8)
+                        ax3.text(
+                            0.99,
+                            0.02,
+                            "Match-by-match goals and expected goals.",
+                            transform=ax3.transAxes,
+                            ha="right",
+                            va="bottom",
+                            fontsize=7,
+                            color="#cccccc",
+                            alpha=0.8,
+                        )
+                        st.pyplot(fig3, use_container_width=True)
+                        plt.close(fig3)
 
-                    p1_goals.append(g1)
-                    p2_goals.append(g2)
-                    p1_xg_list.append(xg1)
-                    p2_xg_list.append(xg2)
-                    score_diff.append(g1 - g2)
+                    # 4) Score difference trend
+                    st.markdown(f"#### Score difference trend (positive = {p1} ahead)")
+                    if match_idx:
+                        fig4, ax4 = plt.subplots(figsize=(6, 2.6))
+                        ax4.axhline(0, color="gray", linewidth=1)
+                        ax4.plot(match_idx, score_diffs, marker="o")
+                        ax4.set_xlabel("Match # (chronological)")
+                        ax4.set_ylabel(f"{p1} − {p2}")
+                        st.pyplot(fig4, use_container_width=True)
+                        plt.close(fig4)
+                        st.markdown(
+                            "<p style='font-size:0.7rem; text-align:right; opacity:0.7;'>"
+                            "Each point is one game: above 0 = win for Player A, below 0 = win for Player B."
+                            "</p>",
+                            unsafe_allow_html=True,
+                        )
 
-                # Convert to numpy for safe NaN handling
-                p1_xg = np.array(p1_xg_list, dtype=float) if p1_xg_list else np.array([])
-                p2_xg = np.array(p2_xg_list, dtype=float) if p2_xg_list else np.array([])
+                    # 5) Radar chart – rivalry profile
+                    st.markdown("#### Rivalry radar (relative per-game profile)")
+                    if match_idx:
+                        n_games = len(match_idx)
+                        win_rate_p1 = wins_p1 / n_games if n_games else 0.0
+                        win_rate_p2 = wins_p2 / n_games if n_games else 0.0
 
-                # ---------- 1) Wins / draws bar chart ----------
-                colA, colB = st.columns(2)
-                
-                with col_c1:
-                    st.markdown("**Wins / draws in this matchup**")
-                    fig, ax = plt.subplots(figsize=(4.5, 2.3))
-                    ax.bar([p1, p2, "Draws"], [wins_p1, wins_p2, draws])
-                    ax.set_ylabel("Games")
-                
-                    # small caption bottom-right
-                    ax.text(
-                        0.99,
-                        0.02,
-                        "Counts of wins/draws in this head-to-head.",
-                        transform=ax.transAxes,
-                        ha="right",
-                        va="bottom",
-                        fontsize=7,
-                        color="#cccccc",
-                        alpha=0.8,
-                    )
-                
-                    st.pyplot(fig, use_container_width=True)
+                        luck_p1 = (gf_p1 - np.nansum(p1_xg)) if np.any(~np.isnan(p1_xg)) else 0.0
+                        luck_p2 = (gf_p2 - np.nansum(p2_xg)) if np.any(~np.isnan(p2_xg)) else 0.0
 
-                # ---------- 2) Goal margin distribution ----------
-                with col_c2:
-    
-                st.markdown("**Goal margin distribution (non-draws)**")
-                fig2, ax2 = plt.subplots(figsize=(4.5, 2.3))
-                ax2.bar(labels, counts)  # whatever your hist variables are
-                ax2.set_ylabel("Games")
-            
-                ax2.text(
-                    0.99,
-                    0.02,
-                    "How often games are decided by 1, 2, or 3+ goals.",
-                    transform=ax2.transAxes,
-                    ha="right",
-                    va="bottom",
-                    fontsize=7,
-                    color="#cccccc",
-                    alpha=0.8,
-                )
-            
-                st.pyplot(fig2, use_container_width=True)
+                        metrics = ["GF", "xG For", "GA", "xG Against", "Win %", "Luck (G−xG)"]
+                        vals_p1 = [avg_gf_p1, avg_xg_for_p1, avg_ga_p1, avg_xg_against_p1, win_rate_p1, luck_p1]
+                        vals_p2 = [avg_gf_p2, avg_xg_for_p2, avg_ga_p2, avg_xg_against_p2, win_rate_p2, luck_p2]
 
-                # ---------- 3) Goals vs xG over time ----------
-                st.markdown("**Goals and xG per match over time**")
-                fig3, ax3 = plt.subplots(figsize=(6, 2.8))
+                        max_vals = [max(abs(v1), abs(v2), 1e-6) for v1, v2 in zip(vals_p1, vals_p2)]
+                        norm_p1 = [v / m for v, m in zip(vals_p1, max_vals)]
+                        norm_p2 = [v / m for v, m in zip(vals_p2, max_vals)]
 
-                if match_idx:
-                    fig_gxg, ax_gxg = plt.subplots(figsize=(6, 3))
-                    # Actual goals
-                    ax_gxg.plot(match_idx, p1_goals, marker="o", linestyle="-", label=f"{p1} goals")
-                    ax_gxg.plot(match_idx, p2_goals, marker="o", linestyle="-", label=f"{p2} goals")
+                        angles = np.linspace(0, 2 * np.pi, len(metrics), endpoint=False)
+                        angles = np.concatenate((angles, [angles[0]]))
+                        norm_p1_loop = norm_p1 + [norm_p1[0]]
+                        norm_p2_loop = norm_p2 + [norm_p2[0]]
 
-                    # xG lines (if we have any)
-                    if p1_xg.size and not np.all(np.isnan(p1_xg)):
-                        ax_gxg.plot(match_idx, p1_xg, marker="x", linestyle="--", label=f"{p1} xG")
-                    if p2_xg.size and not np.all(np.isnan(p2_xg)):
-                        ax_gxg.plot(match_idx, p2_xg, marker="x", linestyle="--", label=f"{p2} xG")
+                        fig_rad, ax_rad = plt.subplots(subplot_kw={"polar": True}, figsize=(5, 3.0))
+                        ax_rad.plot(angles, norm_p1_loop, label=p1)
+                        ax_rad.fill(angles, norm_p1_loop, alpha=0.1)
+                        ax_rad.plot(angles, norm_p2_loop, label=p2)
+                        ax_rad.fill(angles, norm_p2_loop, alpha=0.1)
 
-                    ax3.set_xlabel("Match order")
-                    ax3.set_ylabel("Goals / xG")
-                    
-                    ax3.text(
-                        0.99,
-                        0.02,
-                        "Match-by-match goals and expected goals for each player.",
-                        transform=ax3.transAxes,
-                        ha="right",
-                        va="bottom",
-                        fontsize=7,
-                        color="#cccccc",
-                        alpha=0.8,
-                    )
-                    
-                    st.pyplot(fig3, use_container_width=True)
+                        ax_rad.set_xticks(angles[:-1])
+                        ax_rad.set_xticklabels(metrics, fontsize=7)
+                        ax_rad.set_yticklabels([])
+                        ax_rad.legend(loc="upper right", bbox_to_anchor=(1.2, 1.1), fontsize=8)
+                        st.pyplot(fig_rad, use_container_width=True)
+                        plt.close(fig_rad)
+                        st.markdown(
+                            "<p style='font-size:0.7rem; text-align:right; opacity:0.7;'>"
+                            "Radar shows each player’s relative profile: scoring, xG, defence, win %, and luck."
+                            "</p>",
+                            unsafe_allow_html=True,
+                        )
 
-                # ---------- 4) Score difference trend (p1 perspective) ----------
-                st.markdown(f"##### Score difference trend (positive = {p1} leading)")
-
-                if match_idx:
-                    fig_diff, ax_diff = plt.subplots(figsize=(6, 2.8))
-                    ax_diff.axhline(0, color="gray", linewidth=1)
-                    ax_diff.plot(match_idx, score_diff, marker="o", linestyle="-")
-                    ax_diff.set_xlabel("Match # (chronological)")
-                    ax_diff.set_ylabel(f"{p1} − {p2}")
-                    st.pyplot(fig_diff, use_container_width=True)
-                    plt.close(fig_diff)
-                    st.markdown(
-                        "<p style='font-size:0.7rem; text-align:right; opacity:0.7;'>"
-                        "Each point is one game: above 0 = win for Player A, below 0 = win for Player B."
-                        "</p>",
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    st.write("No matches to show a trend yet.")
-
-                # ---------- 5) Radar chart – rivalry profile ----------
-                st.markdown("##### Rivalry radar (relative per-game profile)")
-
-                if match_idx:
-                    n_games = len(match_idx)
-
-                    # Per-game aggregates
-                    avg_gf_p1 = float(np.mean(p1_goals))
-                    avg_ga_p1 = float(np.mean(p2_goals))
-                    avg_xg_for_p1 = float(np.nanmean(p1_xg)) if p1_xg.size else 0.0
-                    avg_xg_against_p1 = float(np.nanmean(p2_xg)) if p2_xg.size else 0.0
-                    win_rate_p1 = wins_p1 / n_games if n_games > 0 else 0.0
-
-                    avg_gf_p2 = float(np.mean(p2_goals))
-                    avg_ga_p2 = float(np.mean(p1_goals))
-                    avg_xg_for_p2 = float(np.nanmean(p2_xg)) if p2_xg.size else 0.0
-                    avg_xg_against_p2 = float(np.nanmean(p1_xg)) if p1_xg.size else 0.0
-                    win_rate_p2 = wins_p2 / n_games if n_games > 0 else 0.0
-
-                    luck_p1 = (float(np.nansum(p1_goals)) - float(np.nansum(p1_xg))) if p1_xg.size else 0.0
-                    luck_p2 = (float(np.nansum(p2_goals)) - float(np.nansum(p2_xg))) if p2_xg.size else 0.0
-
-                    metrics = ["Goals For", "xG For", "Goals Against", "xG Against", "Win %", "Luck (G−xG)"]
-                    vals_p1 = [avg_gf_p1, avg_xg_for_p1, avg_ga_p1, avg_xg_against_p1, win_rate_p1, luck_p1]
-                    vals_p2 = [avg_gf_p2, avg_xg_for_p2, avg_ga_p2, avg_xg_against_p2, win_rate_p2, luck_p2]
-
-                    # Normalise each metric to [0,1] across the two players (relative shape only)
-                    max_vals = [max(abs(v1), abs(v2), 1e-6) for v1, v2 in zip(vals_p1, vals_p2)]
-                    norm_p1 = [v / m for v, m in zip(vals_p1, max_vals)]
-                    norm_p2 = [v / m for v, m in zip(vals_p2, max_vals)]
-
-                    angles = np.linspace(0, 2 * np.pi, len(metrics), endpoint=False)
-                    angles = np.concatenate((angles, [angles[0]]))
-                    norm_p1_loop = norm_p1 + [norm_p1[0]]
-                    norm_p2_loop = norm_p2 + [norm_p2[0]]
-
-                    fig_rad, ax_rad = plt.subplots(subplot_kw={"polar": True}, figsize=(5, 3.3))
-                    ax_rad.plot(angles, norm_p1_loop, label=p1)
-                    ax_rad.fill(angles, norm_p1_loop, alpha=0.1)
-                    ax_rad.plot(angles, norm_p2_loop, label=p2)
-                    ax_rad.fill(angles, norm_p2_loop, alpha=0.1)
-
-                    ax_rad.set_xticks(angles[:-1])
-                    ax_rad.set_xticklabels(metrics, fontsize=7)
-                    ax_rad.set_yticklabels([])  # hide radial labels – relative only
-                    ax_rad.legend(loc="upper right", bbox_to_anchor=(1.25, 1.1), fontsize=8)
-                    st.pyplot(fig_rad, use_container_width=True)
-                    plt.close(fig_rad)
-                    st.markdown(
-                        "<p style='font-size:0.7rem; text-align:right; opacity:0.7;'>"
-                        "Radar shows each player’s relative profile: scoring, xG, defence, win %, and luck."
-                        "</p>",
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    st.write("Need at least one match to build a radar chart.")
-
-
-                # ----- WIN PREDICTION (ELO) -----
+                # ----- WIN PREDICTION (ELO) – OUTSIDE EXPANDER -----
+                st.markdown("---")
                 st.markdown("### Win Prediction (for next 1v1)")
 
-                ra, rb, prob_a = predict_match_1v1(
-                    df_1v1, selected_game, p1, p2
-                )
+                ra, rb, prob_a = predict_match_1v1(df_1v1, selected_game, p1, p2)
                 st.write("ELO rating (for this game only):")
                 st.write(f"- {p1}: **{round(ra)}**")
                 st.write(f"- {p2}: **{round(rb)}**")
@@ -1638,7 +1612,6 @@ elif page == "Head-to-Head (1v1)":
                     st.success(f"Favouring **{p2}** right now. {p1}, you’re the underdog here.")
                 else:
                     st.info("This one’s tight. Either player could take it.")
-
 
 # ---------- PAGE: HEAD-TO-HEAD (2v2) ----------
 elif page == "Head-to-Head (2v2)":
