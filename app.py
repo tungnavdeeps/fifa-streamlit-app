@@ -607,6 +607,35 @@ def summarize_team_stats_vs_opponent(h2h_df: pd.DataFrame, player: str) -> pd.Da
 
     return grouped
 
+def team_win_rate_vs_opponent(h2h_df: pd.DataFrame, player: str, team_name: str) -> tuple[float, float]:
+    """
+    For a given head-to-head dataframe (one matchup, one game version),
+    compute how this player performs when using a specific team.
+
+    Returns (games_with_team, win_rate_with_team).
+    win_rate is from the player's perspective.
+    """
+    if h2h_df.empty or not team_name:
+        return 0.0, 0.0
+
+    # only matches where this player used that team
+    mask = (
+        ((h2h_df["player1"] == player) & (h2h_df["team1"] == team_name))
+        | ((h2h_df["player2"] == player) & (h2h_df["team2"] == team_name))
+    )
+    df_team = h2h_df[mask].copy()
+    games = len(df_team)
+    if games == 0:
+        return 0.0, 0.0
+
+    # wins from this player's point of view
+    wins = (
+        ((df_team["player1"] == player) & (df_team["score1"] > df_team["score2"]))
+        | ((df_team["player2"] == player) & (df_team["score2"] > df_team["score1"]))
+    ).sum()
+
+    win_rate = wins / games
+    return float(games), float(win_rate)
 
 # =========================
 # UTILS FOR INPUT UI
@@ -1606,25 +1635,77 @@ elif page == "Head-to-Head (1v1)":
                             unsafe_allow_html=True,
                         )
 
-                # ----- WIN PREDICTION (ELO) – OUTSIDE EXPANDER -----
-                st.markdown("---")
-                st.markdown("### Win Prediction (for next 1v1)")
+                            # ----- WIN PREDICTION (ELO) – OUTSIDE EXPANDER -----
+            st.markdown("---")
+            st.markdown("### Win Prediction (for next 1v1)")
 
-                ra, rb, prob_a = predict_match_1v1(df_1v1, selected_game, p1, p2)
-                st.write("ELO rating (for this game only):")
-                st.write(f"- {p1}: **{round(ra)}**")
-                st.write(f"- {p2}: **{round(rb)}**")
+            ra, rb, prob_a = predict_match_1v1(df_1v1, selected_game, p1, p2)
+            st.write("ELO rating (for this game only):")
+            st.write(f"- {p1}: **{round(ra)}**")
+            st.write(f"- {p2}: **{round(rb)}**")
 
-                st.write("Estimated win chance next match:")
-                st.write(f"- **{p1}: {prob_a:.1%}**")
-                st.write(f"- **{p2}: {(1 - prob_a):.1%}**")
+            st.write("Estimated win chance next match:")
+            st.write(f"- **{p1}: {prob_a:.1%}**")
+            st.write(f"- **{p2}: {(1 - prob_a):.1%}**")
 
-                if prob_a > 0.6:
-                    st.success(f"Favouring **{p1}** right now. Time for {p2} to prove the stats wrong.")
-                elif prob_a < 0.4:
-                    st.success(f"Favouring **{p2}** right now. {p1}, you’re the underdog here.")
-                else:
-                    st.info("This one’s tight. Either player could take it.")
+            # Short verdict using base probability only
+            if prob_a > 0.6:
+                st.success(f"Favouring **{p1}** right now. Time for {p2} to prove the stats wrong.")
+            elif prob_a < 0.4:
+                st.success(f"Favouring **{p2}** right now. {p1}, you’re the underdog here.")
+            else:
+                st.info("This one’s tight. Either player could take it.")
+
+            # ---------- Optional team effect overlay ----------
+            st.markdown("### Optional: team-based adjustment")
+
+            total_games = wins_p1 + wins_p2 + draws
+            base_wr_p1 = wins_p1 / total_games if total_games else 0.0
+            base_wr_p2 = wins_p2 / total_games if total_games else 0.0
+
+            col_team1, col_team2 = st.columns(2)
+            with col_team1:
+                team_future_p1 = st.text_input(
+                    f"{p1} planned team (optional)", key="pred_team_p1"
+                ).strip()
+            with col_team2:
+                team_future_p2 = st.text_input(
+                    f"{p2} planned team (optional)", key="pred_team_p2"
+                ).strip()
+
+            # Helper to show effect text
+            def _describe_team_effect(player_name, base_wr, base_prob, team_name):
+                games_t, wr_t = team_win_rate_vs_opponent(h2h_df, player_name, team_name)
+                if games_t == 0:
+                    st.write(f"No past games where **{player_name}** used **{team_name}** in this matchup.")
+                    return
+
+                delta_wr = wr_t - base_wr  # positive if this team historically better
+                # convert win-rate delta into a small probability nudge
+                # scale down so a huge +40% win-rate doesn't explode the prediction
+                delta_prob = 0.25 * delta_wr  # 0.25 is a heuristic scale
+                adj_prob = max(0.05, min(0.95, base_prob + delta_prob))
+
+                sign = "+" if delta_prob >= 0 else "−"
+                st.write(
+                    f"Using **{team_name}**: {player_name} has "
+                    f"a **{wr_t:.1%}** win rate in {int(games_t)} games "
+                    f"(overall vs this opponent: {base_wr:.1%})."
+                )
+                st.write(
+                    f"Team effect: {sign}{abs(delta_prob) * 100:.1f} pts → "
+                    f"adjusted win chance ≈ **{adj_prob:.1%}** "
+                    f"(base: {base_prob:.1%})."
+                )
+
+            # Show effect for Player A (if a future team is provided)
+            if team_future_p1:
+                _describe_team_effect(p1, base_wr_p1, prob_a, team_future_p1)
+
+            # Show effect for Player B (if a future team is provided)
+            if team_future_p2:
+                base_prob_b = 1.0 - prob_a
+                _describe_team_effect(p2, base_wr_p2, base_prob_b, team_future_p2)
 
 # ---------- PAGE: HEAD-TO-HEAD (2v2) ----------
 elif page == "Head-to-Head (2v2)":
