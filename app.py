@@ -1207,78 +1207,6 @@ elif page == "Record Match":
                 st.success(f"Saved 2v1 match for {game_for_entry}! 🎉")
                 load_all_data.clear()
 
-    # -------------------------
-    #          2v1
-    # -------------------------
-    elif match_type == "2v1":
-        col1, col2 = st.columns(2)
-
-        # Two-player side
-        with col1:
-            st.markdown("**Team 1 (2-player side)**")
-            team1_name = st.text_input("Team 1 name", key="2v1_team1_name").strip()
-            team1_players = st.text_input(
-                "Team 1 players (e.g. Sue & Alex)",
-                key="2v1_team1_players",
-            ).strip()
-            score1_2v1 = st.number_input(
-                "Goals scored by Team 1",
-                min_value=0,
-                step=1,
-                key="2v1_score1",
-            )
-            xG1_2v1 = st.number_input(
-                "Expected goals (xG) for Team 1",
-                min_value=0.0,
-                step=0.1,
-                key="2v1_xg1",
-            )
-
-        # Solo side
-        with col2:
-            st.markdown("**Team 2 (solo player)**")
-            team2_name = st.text_input(
-                "Solo side name (e.g. Jordan)", key="2v1_team2_name"
-            ).strip()
-            team2_players = st.text_input(
-                "Solo player name",
-                key="2v1_team2_players",
-            ).strip()
-            score2_2v1 = st.number_input(
-                "Goals scored by Solo side",
-                min_value=0,
-                step=1,
-                key="2v1_score2",
-            )
-            xG2_2v1 = st.number_input(
-                "Expected goals (xG) for Solo side",
-                min_value=0.0,
-                step=0.1,
-                key="2v1_xg2",
-            )
-
-        if st.button("Save 2v1 match", use_container_width=True):
-            if not team1_name or not team2_name:
-                st.error("Please fill in both side names.")
-            elif team1_name == team2_name:
-                st.error("Team names must be different.")
-            else:
-                append_match_2v1(
-                    date,
-                    game_for_entry,
-                    team1_name,
-                    team1_players,
-                    score1_2v1,
-                    xG1_2v1,
-                    team2_name,
-                    team2_players,
-                    score2_2v1,
-                    xG2_2v1,
-                )
-                st.success(f"Saved 2v1 match for {game_for_entry}! 🎉")
-                load_all_data.clear()
-
-
 # ---------- PAGE: HEAD-TO-HEAD (1v1) ----------
 elif page == "Head-to-Head (1v1)":
     st.subheader(f"🔍 1v1 Head-to-Head – {selected_game}")
@@ -1476,8 +1404,9 @@ elif page == "Head-to-Head (1v1)":
                     use_container_width=True,
                 )
 
-                            # ---------- CHARTS: rivalry visuals ----------
+                # ---------- CHARTS: rivalry visuals ----------
             with st.expander("📊 Show charts"):
+
                 # Sort matches chronologically for time-based plots
                 h2h_sorted = h2h_df.sort_values("date").reset_index(drop=True)
 
@@ -1485,8 +1414,8 @@ elif page == "Head-to-Head (1v1)":
                 match_idx = []
                 p1_goals = []
                 p2_goals = []
-                p1_xg = []
-                p2_xg = []
+                p1_xg_list = []
+                p2_xg_list = []
                 score_diff = []  # p1 goals - p2 goals
 
                 for i, row in h2h_sorted.iterrows():
@@ -1506,23 +1435,67 @@ elif page == "Head-to-Head (1v1)":
 
                     p1_goals.append(g1)
                     p2_goals.append(g2)
-                    p1_xg.append(xg1)
-                    p2_xg.append(xg2)
+                    p1_xg_list.append(xg1)
+                    p2_xg_list.append(xg2)
                     score_diff.append(g1 - g2)
+
+                # Convert to numpy for safe NaN handling
+                p1_xg = np.array(p1_xg_list, dtype=float) if p1_xg_list else np.array([])
+                p2_xg = np.array(p2_xg_list, dtype=float) if p2_xg_list else np.array([])
+
+                # ---------- quick xG summary table ----------
+                if match_idx:
+                    avg_gf_p1 = float(np.mean(p1_goals))
+                    avg_xg_for_p1 = float(np.nanmean(p1_xg)) if p1_xg.size else 0.0
+                    avg_ga_p1 = float(np.mean(p2_goals))
+                    avg_xg_against_p1 = float(np.nanmean(p2_xg)) if p2_xg.size else 0.0
+
+                    avg_gf_p2 = float(np.mean(p2_goals))
+                    avg_xg_for_p2 = float(np.nanmean(p2_xg)) if p2_xg.size else 0.0
+                    avg_ga_p2 = float(np.mean(p1_goals))
+                    avg_xg_against_p2 = float(np.nanmean(p1_xg)) if p1_xg.size else 0.0
+
+                    st.markdown("##### xG vs goals – per-game averages")
+                    stats_table = pd.DataFrame(
+                        {
+                            "Player": [p1, p2],
+                            "Goals For": [avg_gf_p1, avg_gf_p2],
+                            "xG For": [avg_xg_for_p1, avg_xg_for_p2],
+                            "Goals Against": [avg_ga_p1, avg_ga_p2],
+                            "xG Against": [avg_xg_against_p1, avg_xg_against_p2],
+                        }
+                    )
+                    st.dataframe(
+                        stats_table.style.format(
+                            {
+                                "Goals For": "{:.2f}",
+                                "xG For": "{:.2f}",
+                                "Goals Against": "{:.2f}",
+                                "xG Against": "{:.2f}",
+                            }
+                        ),
+                        use_container_width=True,
+                    )
 
                 # ---------- 1) Wins / draws bar chart ----------
                 colA, colB = st.columns(2)
 
                 with colA:
                     st.markdown("##### Wins / draws in this matchup")
-                    fig_w, ax_w = plt.subplots(figsize=(4, 3))
+                    fig_w, ax_w = plt.subplots(figsize=(3.2, 2.3))
                     ax_w.bar([p1, p2, "Draws"], [wins_p1, wins_p2, draws])
                     ax_w.set_ylabel("Games")
                     ax_w.set_ylim(0, max(wins_p1, wins_p2, draws, 1) + 1)
                     for idx, val in enumerate([wins_p1, wins_p2, draws]):
-                        ax_w.text(idx, val + 0.1, str(val), ha="center", va="bottom", fontsize=9)
+                        ax_w.text(idx, val + 0.1, str(val), ha="center", va="bottom", fontsize=8)
                     st.pyplot(fig_w, use_container_width=True)
                     plt.close(fig_w)
+                    st.markdown(
+                        "<p style='font-size:0.7rem; text-align:right; opacity:0.7;'>"
+                        "Bars show total wins and draws for each player in this matchup."
+                        "</p>",
+                        unsafe_allow_html=True,
+                    )
 
                 # ---------- 2) Goal margin distribution ----------
                 with colB:
@@ -1541,13 +1514,19 @@ elif page == "Head-to-Head (1v1)":
                         labels = ["1 goal", "2 goals", "3+ goals"]
                         values = [one_goal, two_goal, three_plus]
 
-                        fig_m, ax_m = plt.subplots(figsize=(4, 3))
+                        fig_m, ax_m = plt.subplots(figsize=(3.2, 2.3))
                         ax_m.barh(labels, values)
                         ax_m.set_xlabel("Games")
                         for y, v in enumerate(values):
-                            ax_m.text(v + 0.1, y, str(v), va="center", fontsize=9)
+                            ax_m.text(v + 0.1, y, str(v), va="center", fontsize=8)
                         st.pyplot(fig_m, use_container_width=True)
                         plt.close(fig_m)
+                        st.markdown(
+                            "<p style='font-size:0.7rem; text-align:right; opacity:0.7;'>"
+                            "Shows how many games were decided by 1, 2, or 3+ goals."
+                            "</p>",
+                            unsafe_allow_html=True,
+                        )
                     else:
                         st.write("All games have been draws so far – no win margins to show.")
 
@@ -1555,15 +1534,15 @@ elif page == "Head-to-Head (1v1)":
                 st.markdown("##### Goals vs expected goals (xG) over time")
 
                 if match_idx:
-                    fig_gxg, ax_gxg = plt.subplots(figsize=(7, 3.5))
+                    fig_gxg, ax_gxg = plt.subplots(figsize=(6, 3))
                     # Actual goals
                     ax_gxg.plot(match_idx, p1_goals, marker="o", linestyle="-", label=f"{p1} goals")
                     ax_gxg.plot(match_idx, p2_goals, marker="o", linestyle="-", label=f"{p2} goals")
 
-                    # xG lines (ignore all-NaN)
-                    if not all(np.isnan(p1_xg)):
+                    # xG lines (if we have any)
+                    if p1_xg.size and not np.all(np.isnan(p1_xg)):
                         ax_gxg.plot(match_idx, p1_xg, marker="x", linestyle="--", label=f"{p1} xG")
-                    if not all(np.isnan(p2_xg)):
+                    if p2_xg.size and not np.all(np.isnan(p2_xg)):
                         ax_gxg.plot(match_idx, p2_xg, marker="x", linestyle="--", label=f"{p2} xG")
 
                     ax_gxg.set_xlabel("Match # (chronological)")
@@ -1572,6 +1551,13 @@ elif page == "Head-to-Head (1v1)":
                     ax_gxg.grid(alpha=0.2)
                     st.pyplot(fig_gxg, use_container_width=True)
                     plt.close(fig_gxg)
+                    st.markdown(
+                        "<p style='font-size:0.7rem; text-align:right; opacity:0.7;'>"
+                        "Dots are goals scored each match; dashed lines are expected goals (xG). "
+                        "Above xG = clinical, below xG = wasteful/unlucky."
+                        "</p>",
+                        unsafe_allow_html=True,
+                    )
                 else:
                     st.write("No matches to plot yet.")
 
@@ -1579,64 +1565,79 @@ elif page == "Head-to-Head (1v1)":
                 st.markdown(f"##### Score difference trend (positive = {p1} leading)")
 
                 if match_idx:
-                    fig_diff, ax_diff = plt.subplots(figsize=(7, 3))
+                    fig_diff, ax_diff = plt.subplots(figsize=(6, 2.8))
                     ax_diff.axhline(0, color="gray", linewidth=1)
                     ax_diff.plot(match_idx, score_diff, marker="o", linestyle="-")
                     ax_diff.set_xlabel("Match # (chronological)")
-                    ax_diff.set_ylabel(f"Score diff ({p1} − {p2})")
+                    ax_diff.set_ylabel(f"{p1} − {p2}")
                     st.pyplot(fig_diff, use_container_width=True)
                     plt.close(fig_diff)
+                    st.markdown(
+                        "<p style='font-size:0.7rem; text-align:right; opacity:0.7;'>"
+                        "Each point is one game: above 0 = win for Player A, below 0 = win for Player B."
+                        "</p>",
+                        unsafe_allow_html=True,
+                    )
                 else:
                     st.write("No matches to show a trend yet.")
 
                 # ---------- 5) Radar chart – rivalry profile ----------
-                st.markdown("##### Rivalry radar (per-game averages – relative scale)")
+                st.markdown("##### Rivalry radar (relative per-game profile)")
 
                 if match_idx:
                     n_games = len(match_idx)
 
-                    # Per-game averages
-                    avg_gf_p1 = float(np.nanmean(p1_goals)) if p1_goals else 0.0
-                    avg_xg_p1 = float(np.nanmean(p1_xg)) if p1_xg else 0.0
-                    avg_ga_p1 = float(np.nanmean(p2_goals)) if p2_goals else 0.0
+                    # Per-game aggregates
+                    avg_gf_p1 = float(np.mean(p1_goals))
+                    avg_ga_p1 = float(np.mean(p2_goals))
+                    avg_xg_for_p1 = float(np.nanmean(p1_xg)) if p1_xg.size else 0.0
+                    avg_xg_against_p1 = float(np.nanmean(p2_xg)) if p2_xg.size else 0.0
                     win_rate_p1 = wins_p1 / n_games if n_games > 0 else 0.0
-                    luck_p1 = (float(np.nansum(p1_goals)) - float(np.nansum(p1_xg))) if not all(np.isnan(p1_xg)) else 0.0
 
-                    avg_gf_p2 = float(np.nanmean(p2_goals)) if p2_goals else 0.0
-                    avg_xg_p2 = float(np.nanmean(p2_xg)) if p2_xg else 0.0
-                    avg_ga_p2 = float(np.nanmean(p1_goals)) if p1_goals else 0.0
+                    avg_gf_p2 = float(np.mean(p2_goals))
+                    avg_ga_p2 = float(np.mean(p1_goals))
+                    avg_xg_for_p2 = float(np.nanmean(p2_xg)) if p2_xg.size else 0.0
+                    avg_xg_against_p2 = float(np.nanmean(p1_xg)) if p1_xg.size else 0.0
                     win_rate_p2 = wins_p2 / n_games if n_games > 0 else 0.0
-                    luck_p2 = (float(np.nansum(p2_goals)) - float(np.nansum(p2_xg))) if not all(np.isnan(p2_xg)) else 0.0
 
-                    metrics = ["Goals For", "xG For", "Goals Against", "Win %", "Luck (Goals−xG)"]
-                    vals_p1 = [avg_gf_p1, avg_xg_p1, avg_ga_p1, win_rate_p1, luck_p1]
-                    vals_p2 = [avg_gf_p2, avg_xg_p2, avg_ga_p2, win_rate_p2, luck_p2]
+                    luck_p1 = (float(np.nansum(p1_goals)) - float(np.nansum(p1_xg))) if p1_xg.size else 0.0
+                    luck_p2 = (float(np.nansum(p2_goals)) - float(np.nansum(p2_xg))) if p2_xg.size else 0.0
 
-                    # Normalise each metric to [0,1] across the two players
+                    metrics = ["Goals For", "xG For", "Goals Against", "xG Against", "Win %", "Luck (G−xG)"]
+                    vals_p1 = [avg_gf_p1, avg_xg_for_p1, avg_ga_p1, avg_xg_against_p1, win_rate_p1, luck_p1]
+                    vals_p2 = [avg_gf_p2, avg_xg_for_p2, avg_ga_p2, avg_xg_against_p2, win_rate_p2, luck_p2]
+
+                    # Normalise each metric to [0,1] across the two players (relative shape only)
                     max_vals = [max(abs(v1), abs(v2), 1e-6) for v1, v2 in zip(vals_p1, vals_p2)]
                     norm_p1 = [v / m for v, m in zip(vals_p1, max_vals)]
                     norm_p2 = [v / m for v, m in zip(vals_p2, max_vals)]
 
-                    # Close the loop
                     angles = np.linspace(0, 2 * np.pi, len(metrics), endpoint=False)
                     angles = np.concatenate((angles, [angles[0]]))
                     norm_p1_loop = norm_p1 + [norm_p1[0]]
                     norm_p2_loop = norm_p2 + [norm_p2[0]]
 
-                    fig_rad, ax_rad = plt.subplots(subplot_kw={"polar": True}, figsize=(6, 4))
+                    fig_rad, ax_rad = plt.subplots(subplot_kw={"polar": True}, figsize=(5, 3.3))
                     ax_rad.plot(angles, norm_p1_loop, label=p1)
                     ax_rad.fill(angles, norm_p1_loop, alpha=0.1)
                     ax_rad.plot(angles, norm_p2_loop, label=p2)
                     ax_rad.fill(angles, norm_p2_loop, alpha=0.1)
 
                     ax_rad.set_xticks(angles[:-1])
-                    ax_rad.set_xticklabels(metrics, fontsize=8)
+                    ax_rad.set_xticklabels(metrics, fontsize=7)
                     ax_rad.set_yticklabels([])  # hide radial labels – relative only
-                    ax_rad.legend(loc="upper right", bbox_to_anchor=(1.2, 1.1), fontsize=8)
+                    ax_rad.legend(loc="upper right", bbox_to_anchor=(1.25, 1.1), fontsize=8)
                     st.pyplot(fig_rad, use_container_width=True)
                     plt.close(fig_rad)
+                    st.markdown(
+                        "<p style='font-size:0.7rem; text-align:right; opacity:0.7;'>"
+                        "Radar shows each player’s relative profile: scoring, xG, defence, win %, and luck."
+                        "</p>",
+                        unsafe_allow_html=True,
+                    )
                 else:
                     st.write("Need at least one match to build a radar chart.")
+
 
                 # ----- WIN PREDICTION (ELO) -----
                 st.markdown("### Win Prediction (for next 1v1)")
