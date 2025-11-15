@@ -1193,20 +1193,32 @@ elif page == "Record Match":
                 step=1,
                 key="2v1_score1",
             )
+            xG1_2v1 = st.number_input(
+                "Expected goals (xG) for Team 1",
+                min_value=0.0,
+                step=0.1,
+                key="xg1_2v1",
+            )
 
         # Solo side
         with col2:
             st.markdown("**Team 2 (solo player)**")
-            team2_name = st.text_input("Solo side name (e.g. Jordan)", key="2v1_team2_name").strip()
+            team2_name = st.text_input("Solo Player name", key="2v1_team2_name").strip()
             team2_players = st.text_input(
                 "Solo player name",
                 key="2v1_team2_players",
             ).strip()
             score2_2v1 = st.number_input(
-                "Goals scored by Solo side",
+                "Goals scored by Solo Player",
                 min_value=0,
                 step=1,
                 key="2v1_score2",
+            )
+             xG2_2v1 = st.number_input(
+                "Expected goals (xG) for Team 2",
+                min_value=0.0,
+                step=0.1,
+                key="xg2_2v1",
             )
 
         if st.button("Save 2v1 match", use_container_width=True):
@@ -1221,9 +1233,11 @@ elif page == "Record Match":
                     team1_name,
                     team1_players,
                     score1_2v1,
+                    xG1_2v1,
                     team2_name,
                     team2_players,
                     score2_2v1,
+                    xG2_2v1
                 )
                 st.success(f"Saved 2v1 match for {game_for_entry}! 🎉")
                 load_all_data.clear()
@@ -1447,8 +1461,10 @@ elif page == "Head-to-Head (1v1)":
                             "date",
                             "player1",
                             "team1",
+                            "xG1",
                             "score1",
                             "score2",
+                            "xG2",
                             "team2",
                             "player2",
                         ]
