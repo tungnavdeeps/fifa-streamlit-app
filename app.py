@@ -1214,7 +1214,7 @@ elif page == "Record Match":
                 step=1,
                 key="2v1_score2",
             )
-             xG2_2v1 = st.number_input(
+                 xG2_2v1 = st.number_input(
                 "Expected goals (xG) for Team 2",
                 min_value=0.0,
                 step=0.1,
