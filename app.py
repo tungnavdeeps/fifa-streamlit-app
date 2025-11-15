@@ -1472,7 +1472,7 @@ elif page == "Head-to-Head (1v1)":
                     use_container_width=True,
                 )
 
-                # ----- CHARTS IN EXPANDER -----
+                                # ----- CHARTS IN EXPANDER -----
                 with st.expander("📊 Show charts"):
                     # 1) Wins / draws bar
                     c1, c2 = st.columns(2)
@@ -1481,19 +1481,14 @@ elif page == "Head-to-Head (1v1)":
                         ax.bar([p1, p2, "Draws"], [wins_p1, wins_p2, draws])
                         ax.set_ylabel("Games")
                         ax.set_title("Wins / draws")
-                        ax.text(
-                            0.99,
-                            0.02,
-                            "Counts of wins/draws in this head-to-head.",
-                            transform=ax.transAxes,
-                            ha="right",
-                            va="bottom",
-                            fontsize=7,
-                            color="#cccccc",
-                            alpha=0.8,
-                        )
                         st.pyplot(fig, use_container_width=True)
                         plt.close(fig)
+                        st.markdown(
+                            "<p style='font-size:0.7rem; text-align:right; opacity:0.7;'>"
+                            "Counts of wins, losses, and draws in this head-to-head."
+                            "</p>",
+                            unsafe_allow_html=True,
+                        )
 
                     # 2) Goal margin distribution
                     with c2:
@@ -1507,53 +1502,55 @@ elif page == "Head-to-Head (1v1)":
                         ax2.bar(labels, counts)
                         ax2.set_ylabel("Games")
                         ax2.set_title("Scoreline spread")
-                        ax2.text(
-                            0.99,
-                            0.02,
-                            "How often games are decided by 1, 2, or 3+ goals.",
-                            transform=ax2.transAxes,
-                            ha="right",
-                            va="bottom",
-                            fontsize=7,
-                            color="#cccccc",
-                            alpha=0.8,
-                        )
                         st.pyplot(fig2, use_container_width=True)
                         plt.close(fig2)
+                        st.markdown(
+                            "<p style='font-size:0.7rem; text-align:right; opacity:0.7;'>"
+                            "How often games are decided by 1, 2, or 3+ goals."
+                            "</p>",
+                            unsafe_allow_html=True,
+                        )
 
                     # 3) Goals & xG per match over time
                     st.markdown("#### Goals and xG per match over time")
                     if match_idx:
-                        fig3, ax3 = plt.subplots(figsize=(6, 2.6))
+                        fig3, ax3 = plt.subplots(figsize=(5.0, 2.4))
                         ax3.plot(match_idx, p1_goals, marker="o", label=f"{p1} goals")
                         ax3.plot(match_idx, p2_goals, marker="o", label=f"{p2} goals")
 
                         if np.any(~np.isnan(p1_xg)):
-                            ax3.plot(match_idx, p1_xg, marker="x", linestyle="--", label=f"{p1} xG")
+                            ax3.plot(
+                                match_idx,
+                                p1_xg,
+                                marker="x",
+                                linestyle="--",
+                                label=f"{p1} xG",
+                            )
                         if np.any(~np.isnan(p2_xg)):
-                            ax3.plot(match_idx, p2_xg, marker="x", linestyle="--", label=f"{p2} xG")
+                            ax3.plot(
+                                match_idx,
+                                p2_xg,
+                                marker="x",
+                                linestyle="--",
+                                label=f"{p2} xG",
+                            )
 
                         ax3.set_xlabel("Match # (chronological)")
                         ax3.set_ylabel("Goals / xG")
                         ax3.legend(fontsize=8)
-                        ax3.text(
-                            0.99,
-                            0.02,
-                            "Match-by-match goals and expected goals.",
-                            transform=ax3.transAxes,
-                            ha="right",
-                            va="bottom",
-                            fontsize=7,
-                            color="#cccccc",
-                            alpha=0.8,
-                        )
                         st.pyplot(fig3, use_container_width=True)
                         plt.close(fig3)
+                        st.markdown(
+                            "<p style='font-size:0.7rem; text-align:right; opacity:0.7;'>"
+                            "Match-by-match goals and expected goals (xG) for each player."
+                            "</p>",
+                            unsafe_allow_html=True,
+                        )
 
                     # 4) Score difference trend
                     st.markdown(f"#### Score difference trend (positive = {p1} ahead)")
                     if match_idx:
-                        fig4, ax4 = plt.subplots(figsize=(6, 2.6))
+                        fig4, ax4 = plt.subplots(figsize=(5.0, 2.4))
                         ax4.axhline(0, color="gray", linewidth=1)
                         ax4.plot(match_idx, score_diffs, marker="o")
                         ax4.set_xlabel("Match # (chronological)")
@@ -1590,7 +1587,7 @@ elif page == "Head-to-Head (1v1)":
                         norm_p1_loop = norm_p1 + [norm_p1[0]]
                         norm_p2_loop = norm_p2 + [norm_p2[0]]
 
-                        fig_rad, ax_rad = plt.subplots(subplot_kw={"polar": True}, figsize=(5, 3.0))
+                        fig_rad, ax_rad = plt.subplots(subplot_kw={"polar": True}, figsize=(5.0, 3.0))
                         ax_rad.plot(angles, norm_p1_loop, label=p1)
                         ax_rad.fill(angles, norm_p1_loop, alpha=0.1)
                         ax_rad.plot(angles, norm_p2_loop, label=p2)
