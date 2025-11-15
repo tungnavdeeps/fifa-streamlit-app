@@ -513,12 +513,112 @@ def head_to_head_1v1(df: pd.DataFrame, game: str, p1: str, p2: str) -> pd.DataFr
     return df_game[mask].copy()
 
 
-def predict_match_1v1(df: pd.DataFrame, game: str, player_a: str, player_b: str):
+def _prediction_components_1v1(df: pd.DataFrame, game: str, player_a: str, player_b: str):
+    """
+    Internal helper: compute all components for the hybrid model.
+    Returns a dict with:
+      ra, rb, elo_prob, h2h_prob, xg_prob, final_prob
+    """
+    # -------- 1. ELO component (vs everyone in this game) --------
     ratings = compute_ratings_1v1(df, game)
     ra = ratings.get(player_a, 1000)
     rb = ratings.get(player_b, 1000)
-    prob_a = expected_score(ra, rb)
-    return ra, rb, prob_a
+    elo_prob = expected_score(ra, rb)  # ELO win chance for A
+
+    # -------- 2. Head-to-head + recent form --------
+    h2h_df = head_to_head_1v1(df, game, player_a, player_b)
+    h2h_prob = None
+    xg_prob = None
+
+    if not h2h_df.empty:
+        total_games = len(h2h_df)
+
+        # Overall H2H (draw = 0.5)
+        wins_a = (
+            ((h2h_df["player1"] == player_a) & (h2h_df["score1"] > h2h_df["score2"])).sum()
+            + ((h2h_df["player2"] == player_a) & (h2h_df["score2"] > h2h_df["score1"])).sum()
+        )
+        wins_b = (
+            ((h2h_df["player1"] == player_b) & (h2h_df["score1"] > h2h_df["score2"])).sum()
+            + ((h2h_df["player2"] == player_b) & (h2h_df["score2"] > h2h_df["score1"])).sum()
+        )
+        draws = (h2h_df["score1"] == h2h_df["score2"]).sum()
+
+        if total_games > 0:
+            h2h_prob_overall = (wins_a + 0.5 * draws) / total_games
+        else:
+            h2h_prob_overall = None
+
+        # Recent form: last up to 5 H2H matches
+        h2h_recent = h2h_df.sort_values("date").tail(min(5, total_games))
+        if not h2h_recent.empty:
+            recent_games = len(h2h_recent)
+            r_wins_a = (
+                ((h2h_recent["player1"] == player_a) & (h2h_recent["score1"] > h2h_recent["score2"])).sum()
+                + ((h2h_recent["player2"] == player_a) & (h2h_recent["score2"] > h2h_recent["score1"])).sum()
+            )
+            r_draws = (h2h_recent["score1"] == h2h_recent["score2"]).sum()
+            h2h_prob_recent = (r_wins_a + 0.5 * r_draws) / recent_games
+        else:
+            h2h_prob_recent = None
+
+        if h2h_prob_overall is not None:
+            if h2h_prob_recent is not None and total_games >= 3:
+                h2h_prob = 0.5 * h2h_prob_overall + 0.5 * h2h_prob_recent
+            else:
+                h2h_prob = h2h_prob_overall
+
+        # -------- 3. xG-based edge in this rivalry --------
+        if "xG1" in h2h_df.columns and "xG2" in h2h_df.columns:
+            diffs = []
+            for _, row in h2h_df.iterrows():
+                if row["player1"] == player_a:
+                    xa = row.get("xG1")
+                    xb = row.get("xG2")
+                else:
+                    xa = row.get("xG2")
+                    xb = row.get("xG1")
+
+                if pd.notna(xa) and pd.notna(xb):
+                    diffs.append(float(xa) - float(xb))
+
+            if diffs:
+                avg_diff = float(np.mean(diffs))
+                # logistic mapping from xG-goal advantage → probability
+                xg_prob = 1.0 / (1.0 + np.exp(-avg_diff / 0.75))
+
+    # -------- 4. Blend components --------
+    components = [elo_prob]
+    weights = [0.5]  # 50% ELO baseline
+
+    if h2h_prob is not None:
+        components.append(h2h_prob)
+        weights.append(0.3)  # 30% H2H
+
+    if xg_prob is not None:
+        components.append(xg_prob)
+        weights.append(0.2)  # 20% xG
+
+    w_sum = sum(weights)
+    final_prob = sum(c * w for c, w in zip(components, weights)) / w_sum
+    final_prob = max(0.05, min(0.95, final_prob))  # clamp
+
+    return {
+        "ra": ra,
+        "rb": rb,
+        "elo_prob": elo_prob,
+        "h2h_prob": h2h_prob,
+        "xg_prob": xg_prob,
+        "final_prob": final_prob,
+    }
+
+def predict_match_1v1(df: pd.DataFrame, game: str, player_a: str, player_b: str):
+    """
+    Public API used by the app.
+    Keeps the old signature: returns (ra, rb, prob_a).
+    """
+    comps = _prediction_components_1v1(df, game, player_a, player_b)
+    return comps["ra"], comps["rb"], comps["final_prob"]
 
 
 def compute_goals_vs_opponent(h2h_df: pd.DataFrame, player: str):
@@ -1636,25 +1736,53 @@ elif page == "Head-to-Head (1v1)":
                         )
 
                             # ----- WIN PREDICTION (ELO) – OUTSIDE EXPANDER -----
+            # ----- WIN PREDICTION (hybrid model) – OUTSIDE EXPANDER -----
             st.markdown("---")
             st.markdown("### Win Prediction (for next 1v1)")
-
-            ra, rb, prob_a = predict_match_1v1(df_1v1, selected_game, p1, p2)
+            
+            # Use the internal helper so we can see all components
+            comps = _prediction_components_1v1(df_1v1, selected_game, p1, p2)
+            ra = comps["ra"]
+            rb = comps["rb"]
+            prob_a = comps["final_prob"]
+            elo_component = comps["elo_prob"]
+            h2h_component = comps["h2h_prob"]
+            xg_component = comps["xg_prob"]
+            
             st.write("ELO rating (for this game only):")
             st.write(f"- {p1}: **{round(ra)}**")
             st.write(f"- {p2}: **{round(rb)}**")
-
-            st.write("Estimated win chance next match:")
+            
+            st.write("Estimated win chance next match (hybrid model):")
             st.write(f"- **{p1}: {prob_a:.1%}**")
             st.write(f"- **{p2}: {(1 - prob_a):.1%}**")
-
-            # Short verdict using base probability only
+            
+            # Favourite / underdog summary (same logic as before)
             if prob_a > 0.6:
                 st.success(f"Favouring **{p1}** right now. Time for {p2} to prove the stats wrong.")
             elif prob_a < 0.4:
                 st.success(f"Favouring **{p2}** right now. {p1}, you’re the underdog here.")
             else:
                 st.info("This one’s tight. Either player could take it.")
+            
+            # ---- Explain the blend ----
+            st.markdown("**Model blend:** 50% ELO, 30% head-to-head (incl. last 5 games), 20% xG edge.")
+            
+            lines = []
+            lines.append(f"- ELO-only win chance for {p1}: **{elo_component:.1%}**")
+            
+            if h2h_component is not None:
+                lines.append(f"- Head-to-head / recent-form chance: **{h2h_component:.1%}**")
+            else:
+                lines.append("- Head-to-head / recent-form chance: _n/a (not enough games yet)_")
+            
+            if xg_component is not None:
+                lines.append(f"- xG-based chance (expected-goals edge): **{xg_component:.1%}**")
+            else:
+                lines.append("- xG-based chance: _n/a (no xG data yet)_")
+            
+            st.markdown("\n".join(lines))
+
 
             # ---------- Optional team effect overlay ----------
             st.markdown("### Optional: team-based adjustment")
