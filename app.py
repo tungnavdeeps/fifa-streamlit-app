@@ -1069,7 +1069,7 @@ if page == "Dashboard":
 
 
     # ---------- TITLES / AWARDS ----------
-       st.markdown("### 🏆 1v1 Player Awards & Titles")
+    st.markdown("### 🏆 1v1 Player Awards & Titles")
 
     if leaderboard_players.empty:
         st.info("No 1v1 matches yet to calculate player titles.")
