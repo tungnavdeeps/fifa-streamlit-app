@@ -1067,172 +1067,138 @@ if page == "Dashboard":
 
     st.markdown("---")
 
+        st.markdown("### 🏆 1v1 Player Awards & Titles")
 
-    # ---------- TITLES / AWARDS ----------
-    st.markdown("### 🏆 1v1 Player Awards & Titles")
+        if leaderboard_players.empty:
+            st.info("No 1v1 matches yet to calculate player titles.")
+        else:
+            import numpy as np
+            from collections import defaultdict
 
-    if leaderboard_players.empty:
-        st.info("No 1v1 matches yet to calculate player titles.")
-    else:
-        import numpy as np
-        from collections import defaultdict
+            awards_1v1 = {}
 
-        awards_1v1 = {}
-
-        # ---------- Existing “core” awards ----------
-        # Golden Boot – most total goals scored
-        golden_boot = leaderboard_players.sort_values(
-            "goals_for", ascending=False
-        ).iloc[0]
-        awards_1v1["Golden Boot (Top Scorer)"] = (
-            f"**{golden_boot['player']}** – {int(golden_boot['goals_for'])} goals"
-        )
-
-        # Eligible players for serious titles (min 5 games)
-        eligible = leaderboard_players[leaderboard_players["games"] >= 5].copy()
-
-        # Brick Wall – lowest avg goals conceded
-        if not eligible.empty:
-            best_def = eligible.sort_values("avg_goals_against").iloc[0]
-            awards_1v1["Brick Wall (Best Defense)"] = (
-                f"**{best_def['player']}** – "
-                f"{best_def['avg_goals_against']:.2f} avg conceded"
-            )
-
-            # Consistent Winner – highest win %
-            best_wr = eligible.sort_values("win_pct", ascending=False).iloc[0]
-            awards_1v1["Consistent Winner (Highest Win %)"] = (
-                f"**{best_wr['player']}** – {best_wr['win_pct']:.1%} wins"
-            )
-
-        # Most Feared Rival – highest avg goals per game
-        top_attacker = leaderboard_players.sort_values(
-            "avg_goals_for", ascending=False
-        ).iloc[0]
-        awards_1v1["Most Feared Rival (Attack Threat)"] = (
-            f"**{top_attacker['player']}** – "
-            f"{top_attacker['avg_goals_for']:.2f} avg goals per game"
-        )
-
-        # Clean Sheet King – most games with opponent scoring 0
-        clean_sheets = {}
-        for _, row in df_1v1_game.iterrows():
-            if row["score2"] == 0:
-                clean_sheets[row["player1"]] = clean_sheets.get(row["player1"], 0) + 1
-            if row["score1"] == 0:
-                clean_sheets[row["player2"]] = clean_sheets.get(row["player2"], 0) + 1
-
-        if clean_sheets:
-            cs_player = max(clean_sheets, key=clean_sheets.get)
-            awards_1v1["Clean Sheet King"] = (
-                f"**{cs_player}** – {clean_sheets[cs_player]} "
-                f"matches with 0 goals conceded"
-            )
-
-        # ---------- NEW: All-round “Strongest” + recent form ----------
-        eligible_all = leaderboard_players[leaderboard_players["games"] >= 5].copy()
-        if not eligible_all.empty:
-            # Goal difference per game
-            eligible_all["gd_per_game"] = (
-                eligible_all["goal_diff"] / eligible_all["games"]
-            )
-
-            # Composite score: 50% win%, 50% GD per game (both rank-normalized)
-            eligible_all["composite"] = (
-                eligible_all["win_pct"].rank(pct=True) * 0.5
-                + eligible_all["gd_per_game"].rank(pct=True) * 0.5
-            )
-
-            best_overall = eligible_all.sort_values(
-                "composite", ascending=False
+            # ---------- Core: Golden Boot ----------
+            golden_boot = leaderboard_players.sort_values(
+                "goals_for", ascending=False
             ).iloc[0]
-            awards_1v1["All-Round MVP (Strongest Overall)"] = (
-                f"**{best_overall['player']}** – "
-                f"{best_overall['win_pct']:.1%} wins, "
-                f"GD/game {best_overall['gd_per_game']:.2f}"
+            awards_1v1["Golden Boot (Top Scorer)"] = (
+                f"**{golden_boot['player']}** – {int(golden_boot['goals_for'])} goals"
             )
 
-            # Recent form – last 10 games win%
-            recent_results = defaultdict(list)
-            df_sorted = df_1v1_game.sort_values("date")
+            # Players with enough games
+            eligible = leaderboard_players[leaderboard_players["games"] >= 5].copy()
 
-            for _, row in df_sorted.iterrows():
-                p1, p2 = row["player1"], row["player2"]
-                s1, s2 = row["score1"], row["score2"]
-                if pd.isna(p1) or pd.isna(p2) or pd.isna(s1) or pd.isna(s2):
-                    continue
-                if s1 > s2:
-                    r1, r2 = 1.0, 0.0
-                elif s1 < s2:
-                    r1, r2 = 0.0, 1.0
-                else:
-                    r1 = r2 = 0.5
-                recent_results[p1].append(r1)
-                recent_results[p2].append(r2)
-
-            streak_scores = {}
-            for player, seq in recent_results.items():
-                if len(seq) >= 3:  # need at least a few games
-                    last = seq[-10:]
-                    streak_scores[player] = sum(
-                        1 for r in last if r == 1.0
-                    ) / len(last)
-
-            if streak_scores:
-                hot_player = max(streak_scores, key=streak_scores.get)
-                games_count = min(10, len(recent_results[hot_player]))
-                awards_1v1["Most Improved Form (Last 10 Games)"] = (
-                    f"**{hot_player}** – "
-                    f"{streak_scores[hot_player]:.1%} wins "
-                    f"over their last {games_count} games"
+            # Best Defense
+            if not eligible.empty:
+                best_def = eligible.sort_values("avg_goals_against").iloc[0]
+                awards_1v1["Brick Wall (Best Defense)"] = (
+                    f"**{best_def['player']}** – {best_def['avg_goals_against']:.2f} avg conceded"
                 )
 
-        # ---------- NEW: xG-based “luck” (G − xG) ----------
-        if "xG1" in df_1v1_game.columns and "xG2" in df_1v1_game.columns:
-            xg_for_map = {}
+                best_wr = eligible.sort_values("win_pct", ascending=False).iloc[0]
+                awards_1v1["Consistent Winner (Highest Win Rate)"] = (
+                    f"**{best_wr['player']}** – {best_wr['win_pct']:.1%} wins"
+                )
 
+            # Attack Threat
+            top_attack = leaderboard_players.sort_values(
+                "avg_goals_for", ascending=False
+            ).iloc[0]
+            awards_1v1["Most Feared Rival (Attack Threat)"] = (
+                f"**{top_attack['player']}** – {top_attack['avg_goals_for']:.2f} avg goals per game"
+            )
+
+            # Clean Sheet King
+            clean_sheets = {}
             for _, row in df_1v1_game.iterrows():
-                p1, p2 = row["player1"], row["player2"]
-                xg1 = row.get("xG1", np.nan)
-                xg2 = row.get("xG2", np.nan)
+                if row["score2"] == 0:
+                    clean_sheets[row["player1"]] = clean_sheets.get(row["player1"], 0) + 1
+                if row["score1"] == 0:
+                    clean_sheets[row["player2"]] = clean_sheets.get(row["player2"], 0) + 1
 
-                if pd.notna(p1) and not np.isnan(xg1):
-                    xg_for_map[p1] = xg_for_map.get(p1, 0.0) + xg1
-                if pd.notna(p2) and not np.isnan(xg2):
-                    xg_for_map[p2] = xg_for_map.get(p2, 0.0) + xg2
-
-            leaderboard_players["xg_for"] = leaderboard_players["player"].map(
-                lambda p: xg_for_map.get(p, np.nan)
-            )
-            leaderboard_players["luck_g_minus_xg"] = (
-                leaderboard_players["goals_for"] - leaderboard_players["xg_for"]
-            )
-
-            eligible_xg = leaderboard_players[
-                leaderboard_players["xg_for"].notna()
-                & (leaderboard_players["games"] >= 5)
-            ].copy()
-
-            if not eligible_xg.empty:
-                luckiest = eligible_xg.sort_values(
-                    "luck_g_minus_xg", ascending=False
-                ).iloc[0]
-                unluckiest = eligible_xg.sort_values(
-                    "luck_g_minus_xg", ascending=True
-                ).iloc[0]
-
-                awards_1v1["Luckiest Finisher (G > xG)"] = (
-                    f"**{luckiest['player']}** – "
-                    f"+{luckiest['luck_g_minus_xg']:.1f} goals vs xG"
-                )
-                awards_1v1["Unluckiest Finisher (xG > G)"] = (
-                    f"**{unluckiest['player']}** – "
-                    f"{unluckiest['luck_g_minus_xg']:.1f} goals vs xG"
+            if clean_sheets:
+                cs_player = max(clean_sheets, key=clean_sheets.get)
+                awards_1v1["Clean Sheet King"] = (
+                    f"**{cs_player}** – {clean_sheets[cs_player]} clean sheets"
                 )
 
-        # ---------- Display all 1v1 titles ----------
-        for title, text in awards_1v1.items():
-            st.markdown(f"🏅 **{title}:** {text}")
+            # ---------- Strongest All-Round Player ----------
+            eligible_all = leaderboard_players[leaderboard_players["games"] >= 5].copy()
+            if not eligible_all.empty:
+                eligible_all["gd_per_game"] = eligible_all["goal_diff"] / eligible_all["games"]
+                eligible_all["composite"] = (
+                    eligible_all["win_pct"].rank(pct=True) * 0.5
+                    + eligible_all["gd_per_game"].rank(pct=True) * 0.5
+                )
+                best_overall = eligible_all.sort_values("composite", ascending=False).iloc[0]
+                awards_1v1["All-Round MVP (Strongest Overall)"] = (
+                    f"**{best_overall['player']}** – "
+                    f"{best_overall['win_pct']:.1%} wins, "
+                    f"GD/game {best_overall['gd_per_game']:.2f}"
+                )
+
+                # Recent Form
+                recent_results = defaultdict(list)
+                df_sorted = df_1v1_game.sort_values("date")
+                for _, row in df_sorted.iterrows():
+                    p1, p2 = row["player1"], row["player2"]
+                    s1, s2 = row["score1"], row["score2"]
+                    if s1 > s2:
+                        r1, r2 = 1.0, 0.0
+                    elif s1 < s2:
+                        r1, r2 = 0.0, 1.0
+                    else:
+                        r1 = r2 = 0.5
+                    recent_results[p1].append(r1)
+                    recent_results[p2].append(r2)
+
+                streak_scores = {
+                    p: sum(r == 1.0 for r in seq[-10:]) / len(seq[-10:])
+                    for p, seq in recent_results.items()
+                    if len(seq) >= 3
+                }
+                if streak_scores:
+                    hot_player = max(streak_scores, key=streak_scores.get)
+                    awards_1v1["Most Improved Form (Last 10 Games)"] = (
+                        f"**{hot_player}** – "
+                        f"{streak_scores[hot_player]:.1%} wins recently"
+                    )
+
+            # ---------- Luck (G − xG) ----------
+            if "xG1" in df_1v1_game.columns:
+                xg_for_map = {}
+                for _, row in df_1v1_game.iterrows():
+                    if not np.isnan(row.get("xG1", np.nan)):
+                        xg_for_map[row["player1"]] = xg_for_map.get(row["player1"], 0) + row["xG1"]
+                    if not np.isnan(row.get("xG2", np.nan)):
+                        xg_for_map[row["player2"]] = xg_for_map.get(row["player2"], 0) + row["xG2"]
+
+                leaderboard_players["xg_for"] = leaderboard_players["player"].map(
+                    lambda p: xg_for_map.get(p, np.nan)
+                )
+                leaderboard_players["luck"] = (
+                    leaderboard_players["goals_for"] - leaderboard_players["xg_for"]
+                )
+
+                eligible_xg = leaderboard_players[
+                    leaderboard_players["xg_for"].notna()
+                    & (leaderboard_players["games"] >= 5)
+                ]
+                if not eligible_xg.empty:
+                    luckiest = eligible_xg.sort_values("luck", ascending=False).iloc[0]
+                    unluckiest = eligible_xg.sort_values("luck", ascending=True).iloc[0]
+
+                    awards_1v1["Luckiest Finisher"] = (
+                        f"**{luckiest['player']}** – +{luckiest['luck']:.1f} goals vs xG"
+                    )
+                    awards_1v1["Unluckiest Finisher"] = (
+                        f"**{unluckiest['player']}** – {unluckiest['luck']:.1f} goals vs xG"
+                    )
+
+            # ---------- Show all awards ----------
+            for title, desc in awards_1v1.items():
+                st.markdown(f"🏅 **{title}:** {desc}")
+
 
 
        st.markdown("### 🏆 2v2 Team Awards & Titles")
