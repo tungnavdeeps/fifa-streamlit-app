@@ -1237,13 +1237,13 @@ if page == "Dashboard":
 
        st.markdown("### 🏆 2v2 Team Awards & Titles")
 
-    if leaderboard_teams.empty:
-        st.info("No 2v2 matches yet to calculate team titles.")
-    else:
-        import numpy as np
-        from collections import defaultdict
+        if leaderboard_teams.empty:
+            st.info("No 2v2 matches yet to calculate team titles.")
+        else:
+            import numpy as np
+            from collections import defaultdict
 
-        awards_2v2 = {}
+            awards_2v2 = {}
 
         # ---------- Core titles ----------
         eligible_teams = leaderboard_teams[leaderboard_teams["games"] >= 3].copy()
