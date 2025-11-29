@@ -1010,22 +1010,25 @@ if page == "Dashboard":
 
     st.markdown("---")
 
-    # ---------- 2v2 TEAM LEADERBOARD ----------
+        # ---------- 2v2 TEAM LEADERBOARD ----------
     st.markdown("## 👥 2v2 Team Leaderboard")
-    
+
+    leaderboard_teams = build_team_leaderboard_2v2(df_2v2, selected_game)
+
     if leaderboard_teams.empty:
         st.info(f"No 2v2 matches yet for {selected_game}.")
     else:
-        # Sort and add Rank column
-        # (we only have win_pct and goal_diff – no elo_rating column yet)
+        # Sort by ELO, then win %, then goal diff
         leaderboard_teams = leaderboard_teams.sort_values(
-            by=["win_pct", "goal_diff"],
-            ascending=[False, False],
+            by=["elo_rating", "win_pct", "goal_diff"],
+            ascending=[False, False, False],
         ).reset_index(drop=True)
-    
+
+        # Add Rank column
         leaderboard_teams.insert(0, "Rank", leaderboard_teams.index + 1)
-    
-        display_cols_t = [
+
+        # Define the columns we *want* to show, in order
+        desired_cols_t = [
             "Rank",
             "team",
             "players",
@@ -1039,18 +1042,24 @@ if page == "Dashboard":
             "avg_goals_for",
             "avg_goals_against",
             "win_pct",
+            "elo_rating",
         ]
-    
+
+        # Keep only those that actually exist in the dataframe
+        display_cols_t = [c for c in desired_cols_t if c in leaderboard_teams.columns]
+
+        fmt_team = {
+            "avg_goals_for": "{:.2f}",
+            "avg_goals_against": "{:.2f}",
+            "win_pct": "{:.1%}",
+            "elo_rating": "{:.0f}",
+        }
+
         st.dataframe(
-            leaderboard_teams[display_cols_t].style.format(
-                {
-                    "avg_goals_for": "{:.2f}",
-                    "avg_goals_against": "{:.2f}",
-                    "win_pct": "{:.1%}",
-                }
-            ),
+            leaderboard_teams[display_cols_t].style.format(fmt_team),
             use_container_width=True,
         )
+
 
 
         # Only keep those that actually exist in the dataframe
