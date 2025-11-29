@@ -1010,36 +1010,36 @@ if page == "Dashboard":
 
     st.markdown("---")
 
-        # ---------- 2v2 TEAM LEADERBOARD ----------
-        st.markdown("## 👥 2v2 Team Leaderboard")
-        
-        if leaderboard_teams.empty:
-            st.info(f"No 2v2 matches yet for {selected_game}.")
-        else:
-            # Sort and add Rank column
-            # (we only have win_pct and goal_diff – no elo_rating column yet)
-            leaderboard_teams = leaderboard_teams.sort_values(
-                by=["win_pct", "goal_diff"],
-                ascending=[False, False],
-            ).reset_index(drop=True)
-        
-            leaderboard_teams.insert(0, "Rank", leaderboard_teams.index + 1)
-        
-            display_cols_t = [
-                "Rank",
-                "team",
-                "players",
-                "games",
-                "wins",
-                "draws",
-                "losses",
-                "goals_for",
-                "goals_against",
-                "goal_diff",
-                "avg_goals_for",
-                "avg_goals_against",
-                "win_pct",
-            ]
+    # ---------- 2v2 TEAM LEADERBOARD ----------
+    st.markdown("## 👥 2v2 Team Leaderboard")
+    
+    if leaderboard_teams.empty:
+        st.info(f"No 2v2 matches yet for {selected_game}.")
+    else:
+        # Sort and add Rank column
+        # (we only have win_pct and goal_diff – no elo_rating column yet)
+        leaderboard_teams = leaderboard_teams.sort_values(
+            by=["win_pct", "goal_diff"],
+            ascending=[False, False],
+        ).reset_index(drop=True)
+    
+        leaderboard_teams.insert(0, "Rank", leaderboard_teams.index + 1)
+    
+        display_cols_t = [
+            "Rank",
+            "team",
+            "players",
+            "games",
+            "wins",
+            "draws",
+            "losses",
+            "goals_for",
+            "goals_against",
+            "goal_diff",
+            "avg_goals_for",
+            "avg_goals_against",
+            "win_pct",
+        ]
     
         st.dataframe(
             leaderboard_teams[display_cols_t].style.format(
