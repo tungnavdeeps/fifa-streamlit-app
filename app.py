@@ -1631,7 +1631,7 @@ elif page == "Record Match":
                 st.success(f"Saved 2v1 match for {game_for_entry}! 🎉")
                 load_all_data.clear()
 
-# -----# ---------- PAGE: HEAD-TO-HEAD (1v1) ----------
+# ---------- PAGE: HEAD-TO-HEAD (1v1) ----------
 elif page == "Head-to-Head (1v1)":
     st.subheader(f"🔍 1v1 Head-to-Head – {selected_game}")
 
@@ -1649,7 +1649,14 @@ elif page == "Head-to-Head (1v1)":
             )
 
         if p1 and p2:
-            h2h_df = head_to_head_1v1(df_1v1, selected_game, p1, p2)
+            # Build head-to-head dataframe for this matchup & game
+            h2h_df = df_1v1[
+                (df_1v1["game"] == selected_game)
+                & (
+                    ((df_1v1["player1"] == p1) & (df_1v1["player2"] == p2))
+                    | ((df_1v1["player1"] == p2) & (df_1v1["player2"] == p1))
+                )
+            ].copy()
 
             st.markdown(f"### {p1} vs {p2} – {selected_game}")
 
@@ -1669,431 +1676,282 @@ elif page == "Head-to-Head (1v1)":
                 p2_goals = []
                 p1_xg_list = []
                 p2_xg_list = []
-                score_diffs = []
-                goal_margins_abs = []
+                score_diffs = []       # from p1 perspective
+                goal_margins_abs = []  # absolute margin
+
+                # Also track basic totals for xG-based component
+                total_xg_p1 = 0.0
+                total_xg_p2 = 0.0
 
                 for i, row in h2h_df.iterrows():
                     s1, s2 = row["score1"], row["score2"]
                     pl1, pl2 = row["player1"], row["player2"]
+                    x1 = row.get("xG1", 0.0) or 0.0
+                    x2 = row.get("xG2", 0.0) or 0.0
 
-                    # win/draw/loss counts
-                    if s1 > s2:
-                        if pl1 == p1:
-                            wins_p1 += 1
-                        elif pl1 == p2:
-                            wins_p2 += 1
-                    elif s2 > s1:
-                        if pl2 == p1:
-                            wins_p1 += 1
-                        elif pl2 == p2:
-                            wins_p2 += 1
+                    # Perspective of p1
+                    if pl1 == p1:
+                        g_for = s1
+                        g_against = s2
+                        xg_for = x1
+                        xg_against = x2
+                    else:
+                        g_for = s2
+                        g_against = s1
+                        xg_for = x2
+                        xg_against = x1
+
+                    if g_for > g_against:
+                        wins_p1 += 1
+                    elif g_for < g_against:
+                        wins_p2 += 1
                     else:
                         draws += 1
 
-                    # From p1 perspective for charts
-                    if pl1 == p1:
-                        g_p1 = s1
-                        g_p2 = s2
-                        xg_p1 = row.get("xG1", np.nan)
-                        xg_p2 = row.get("xG2", np.nan)
-                    else:
-                        g_p1 = s2
-                        g_p2 = s1
-                        xg_p1 = row.get("xG2", np.nan)
-                        xg_p2 = row.get("xG1", np.nan)
-
                     match_idx.append(i + 1)
-                    p1_goals.append(g_p1)
-                    p2_goals.append(g_p2)
-                    p1_xg_list.append(xg_p1)
-                    p2_xg_list.append(xg_p2)
-                    score_diffs.append(g_p1 - g_p2)
-                    if g_p1 != g_p2:
-                        goal_margins_abs.append(abs(g_p1 - g_p2))
+                    p1_goals.append(g_for)
+                    p2_goals.append(g_against)
+                    p1_xg_list.append(xg_for)
+                    p2_xg_list.append(xg_against)
 
-                total_games = len(h2h_df)
+                    score_diff = g_for - g_against
+                    score_diffs.append(score_diff)
+                    goal_margins_abs.append(abs(score_diff))
 
-                # Goals aggregates
-                gf_p1 = sum(p1_goals)
-                ga_p1 = sum(p2_goals)
-                gf_p2 = sum(p2_goals)
-                ga_p2 = sum(p1_goals)
+                    total_xg_p1 += xg_for
+                    total_xg_p2 += xg_against
 
-                avg_gf_p1 = gf_p1 / total_games if total_games else 0.0
-                avg_ga_p1 = ga_p1 / total_games if total_games else 0.0
-                avg_gf_p2 = gf_p2 / total_games if total_games else 0.0
-                avg_ga_p2 = ga_p2 / total_games if total_games else 0.0
+                total_matches = len(h2h_df)
+                total_goals_p1 = sum(p1_goals)
+                total_goals_p2 = sum(p2_goals)
 
-                # xG aggregates for text / radar
-                p1_xg = np.array(p1_xg_list, dtype=float)
-                p2_xg = np.array(p2_xg_list, dtype=float)
+                avg_g_p1 = total_goals_p1 / total_matches
+                avg_g_p2 = total_goals_p2 / total_matches
+                avg_xg_p1 = (total_xg_p1 / total_matches) if total_matches > 0 else 0.0
+                avg_xg_p2 = (total_xg_p2 / total_matches) if total_matches > 0 else 0.0
 
-                avg_xg_for_p1 = float(np.nanmean(p1_xg)) if np.any(~np.isnan(p1_xg)) else 0.0
-                avg_xg_for_p2 = float(np.nanmean(p2_xg)) if np.any(~np.isnan(p2_xg)) else 0.0
-                avg_xg_against_p1 = float(np.nanmean(p2_xg)) if np.any(~np.isnan(p2_xg)) else 0.0
-                avg_xg_against_p2 = float(np.nanmean(p1_xg)) if np.any(~np.isnan(p1_xg)) else 0.0
+                # Last 5 from p1 perspective
+                last5 = h2h_df.tail(5)
+                last5_results = []
+                for _, row in last5.iterrows():
+                    s1, s2 = row["score1"], row["score2"]
+                    pl1, pl2 = row["player1"], row["player2"]
+                    if pl1 == p1:
+                        g_for, g_against = s1, s2
+                    else:
+                        g_for, g_against = s2, s1
 
-                # ----- TOP METRICS -----
-                colL, colM, colR = st.columns(3)
-                colL.metric(f"{p1} wins", wins_p1)
-                colM.metric("Draws", draws)
-                colR.metric(f"{p2} wins", wins_p2)
+                    if g_for > g_against:
+                        last5_results.append("W")
+                    elif g_for < g_against:
+                        last5_results.append("L")
+                    else:
+                        last5_results.append("D")
 
-                # ----- RIVALRY SUMMARY + LAST 5 -----
-                col_sum_left, col_sum_right = st.columns(2)
+                last5_str = " ".join(last5_results) if last5_results else "N/A"
 
-                with col_sum_left:
-                    st.markdown("### Rivalry summary")
-                    st.write(
-                        f"- Total games: **{total_games}**\n"
-                        f"- {p1}: **{wins_p1}W {draws}D {wins_p2}L**, "
-                        f"{gf_p1} goals / {ga_p1} conceded "
-                        f"(avg {avg_gf_p1:.2f} for, {avg_ga_p1:.2f} against, "
-                        f"xG {avg_xg_for_p1:.2f} for, {avg_xg_against_p1:.2f} against)\n"
-                        f"- {p2}: **{wins_p2}W {draws}D {wins_p1}L**, "
-                        f"{gf_p2} goals / {ga_p2} conceded "
-                        f"(avg {avg_gf_p2:.2f} for, {avg_ga_p2:.2f} against, "
-                        f"xG {avg_xg_for_p2:.2f} for, {avg_xg_against_p2:.2f} against)"
+                # ----- SUMMARY TILES -----
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    st.metric(
+                        f"{p1} record",
+                        f"{wins_p1}W–{draws}D–{wins_p2}L",
+                        help="From Player A perspective",
+                    )
+                with c2:
+                    st.metric(
+                        f"{p1} goals vs {p2}",
+                        f"{total_goals_p1} – {total_goals_p2}",
+                        help="Total goals for and against in this matchup",
+                    )
+                with c3:
+                    st.metric(
+                        "Last 5 (from Player A side)",
+                        last5_str,
+                        help="Most recent 5 results from Player A perspective",
                     )
 
-                with col_sum_right:
-                    st.markdown("### Last 5 games")
-                    last5 = h2h_df.tail(5)
-                    form_p1 = []
-                    form_p2 = []
+                st.markdown("---")
 
-                    for _, row in last5.iterrows():
-                        s1, s2 = row["score1"], row["score2"]
-                        pl1, pl2 = row["player1"], row["player2"]
-
-                        if s1 > s2:
-                            # winner is player1
-                            if pl1 == p1:
-                                form_p1.append("W")
-                                form_p2.append("L")
-                            else:
-                                form_p1.append("L")
-                                form_p2.append("W")
-                        elif s2 > s1:
-                            # winner is player2
-                            if pl2 == p1:
-                                form_p1.append("W")
-                                form_p2.append("L")
-                            else:
-                                form_p1.append("L")
-                                form_p2.append("W")
+                # ----- TEAMS USED TABLE -----
+                def summarize_teams_for_player(hdf, focus_player):
+                    rows = []
+                    for _, r in hdf.iterrows():
+                        if r["player1"] == focus_player:
+                            team = r.get("team1", "")
+                            g_for, g_against = r["score1"], r["score2"]
+                            xg_for = r.get("xG1", 0.0) or 0.0
+                            xg_against = r.get("xG2", 0.0) or 0.0
                         else:
-                            form_p1.append("D")
-                            form_p2.append("D")
+                            team = r.get("team2", "")
+                            g_for, g_against = r["score2"], r["score1"]
+                            xg_for = r.get("xG2", 0.0) or 0.0
+                            xg_against = r.get("xG1", 0.0) or 0.0
+                        rows.append(
+                            {
+                                "team": team,
+                                "goals_for": g_for,
+                                "goals_against": g_against,
+                                "xg_for": xg_for,
+                                "xg_against": xg_against,
+                            }
+                        )
 
-                    st.markdown(
-                        f"**Last 5 form**  \n"
-                        f"{p1}: `{'-'.join(form_p1)}`  \n"
-                        f"{p2}: `{'-'.join(form_p2)}`"
+                    if not rows:
+                        return pd.DataFrame(
+                            columns=[
+                                "team",
+                                "games",
+                                "goals_for",
+                                "goals_against",
+                                "xg_for",
+                                "xg_against",
+                                "avg_goals_for",
+                                "avg_goals_against",
+                                "avg_xg_for",
+                                "avg_xg_against",
+                            ]
+                        )
+
+                    tmp = pd.DataFrame(rows)
+                    grouped = tmp.groupby("team").agg(
+                        games=("goals_for", "count"),
+                        goals_for=("goals_for", "sum"),
+                        goals_against=("goals_against", "sum"),
+                        xg_for=("xg_for", "sum"),
+                        xg_against=("xg_against", "sum"),
                     )
+                    grouped["avg_goals_for"] = grouped["goals_for"] / grouped["games"]
+                    grouped["avg_goals_against"] = (
+                        grouped["goals_against"] / grouped["games"]
+                    )
+                    grouped["avg_xg_for"] = grouped["xg_for"] / grouped["games"]
+                    grouped["avg_xg_against"] = grouped["xg_against"] / grouped["games"]
+                    grouped = grouped.reset_index()
+                    return grouped
 
-                # ----- TEAMS USED (with xG columns) -----
-                st.markdown("### Teams used in this matchup")
+                st.markdown("### Line-ups and clubs used in this matchup")
 
-                team_stats_p1 = summarize_team_stats_vs_opponent(h2h_df, p1)
-                team_stats_p2 = summarize_team_stats_vs_opponent(h2h_df, p2)
+                col_left, col_right = st.columns(2)
+                with col_left:
+                    st.markdown(f"**{p1} – clubs & record**")
+                    team_stats_p1 = summarize_teams_for_player(h2h_df, p1)
+                    st.dataframe(team_stats_p1, use_container_width=True)
+                with col_right:
+                    st.markdown(f"**{p2} – clubs & record**")
+                    team_stats_p2 = summarize_teams_for_player(h2h_df, p2)
+                    st.dataframe(team_stats_p2, use_container_width=True)
 
-                cols_team_display = [
-                    "team",
-                    "games",
-                    "goals_for",
-                    "goals_against",
-                    "xg_for",
-                    "xg_against",
-                    "avg_goals_for",
-                    "avg_goals_against",
-                    "avg_xg_for",
-                    "avg_xg_against",
-                ]
-                fmt_team = {
-                    "goals_for": "{:.0f}",
-                    "goals_against": "{:.0f}",
-                    "xg_for": "{:.2f}",
-                    "xg_against": "{:.2f}",
-                    "avg_goals_for": "{:.2f}",
-                    "avg_goals_against": "{:.2f}",
-                    "avg_xg_for": "{:.2f}",
-                    "avg_xg_against": "{:.2f}",
-                }
+                st.markdown("---")
 
-                colT1, colT2 = st.columns(2)
-                with colT1:
-                    st.markdown(f"**{p1} teams vs {p2}**")
-                    if team_stats_p1.empty:
-                        st.write("No team data recorded.")
-                    else:
-                        st.dataframe(
-                            team_stats_p1[cols_team_display].style.format(fmt_team),
-                            use_container_width=True,
-                        )
-
-                with colT2:
-                    st.markdown(f"**{p2} teams vs {p1}**")
-                    if team_stats_p2.empty:
-                        st.write("No team data recorded.")
-                    else:
-                        st.dataframe(
-                            team_stats_p2[cols_team_display].style.format(fmt_team),
-                            use_container_width=True,
-                        )
-
-                # ----- MATCH HISTORY -----
+                # ----- MATCH HISTORY TABLE -----
                 st.markdown("### Match history")
-                st.dataframe(
-                    h2h_df[
-                        [
-                            "date",
-                            "player1",
-                            "team1",
-                            "xG1",
-                            "score1",
-                            "score2",
-                            "xG2",
-                            "team2",
-                            "player2",
-                        ]
-                    ].sort_values(by="date", ascending=False),
-                    use_container_width=True,
-                )
 
-                                # ----- CHARTS IN EXPANDER -----
+                display_cols = [
+                    "date",
+                    "player1",
+                    "team1",
+                    "score1",
+                    "xG1",
+                    "player2",
+                    "team2",
+                    "score2",
+                    "xG2",
+                ]
+                mh = h2h_df[display_cols].copy()
+                mh["date"] = pd.to_datetime(mh["date"]).dt.strftime("%Y-%m-%d")
+                st.dataframe(mh, use_container_width=True)
+
+                # ----------------- CHARTS IN EXPANDER -----------------
                 with st.expander("📊 Show charts"):
-                    # 1) Wins / draws bar
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        fig, ax = plt.subplots(figsize=(4.0, 2.3))
-                        ax.bar([p1, p2, "Draws"], [wins_p1, wins_p2, draws])
-                        ax.set_ylabel("Games")
-                        ax.set_title("Wins / draws")
-                        st.pyplot(fig, use_container_width=True)
-                        plt.close(fig)
-                        st.markdown(
-                            "<p style='font-size:0.7rem; text-align:right; opacity:0.7;'>"
-                            "Counts of wins, losses, and draws in this head-to-head."
-                            "</p>",
-                            unsafe_allow_html=True,
-                        )
+                    # 1) Win / draw counts
+                    fig1, ax1 = plt.subplots()
+                    ax1.bar(
+                        ["Wins " + p1, "Draws", "Wins " + p2],
+                        [wins_p1, draws, wins_p2],
+                    )
+                    ax1.set_title("Win / draw counts")
+                    ax1.set_ylabel("Matches")
+                    st.pyplot(fig1)
 
-                    # 2) Goal margin distribution
-                    with c2:
-                        fig2, ax2 = plt.subplots(figsize=(4.0, 2.3))
-                        # bucket 1,2,3+ (non-draws)
-                        ones = sum(1 for m in goal_margins_abs if m == 1)
-                        twos = sum(1 for m in goal_margins_abs if m == 2)
-                        big = sum(1 for m in goal_margins_abs if m >= 3)
-                        labels = ["1 goal", "2 goals", "3+ goals"]
-                        counts = [ones, twos, big]
-                        ax2.bar(labels, counts)
-                        ax2.set_ylabel("Games")
-                        ax2.set_title("Scoreline spread")
-                        st.pyplot(fig2, use_container_width=True)
-                        plt.close(fig2)
-                        st.markdown(
-                            "<p style='font-size:0.7rem; text-align:right; opacity:0.7;'>"
-                            "How often games are decided by 1, 2, or 3+ goals."
-                            "</p>",
-                            unsafe_allow_html=True,
-                        )
+                    # 2) Goal margin distribution (absolute)
+                    fig2, ax2 = plt.subplots()
+                    ax2.hist(goal_margins_abs, bins=range(0, max(goal_margins_abs) + 2))
+                    ax2.set_title("Goal margin distribution (absolute)")
+                    ax2.set_xlabel("Goal difference")
+                    ax2.set_ylabel("Matches")
+                    st.pyplot(fig2)
 
                     # 3) Goals & xG per match over time
-                    st.markdown("#### Goals and xG per match over time")
-                    if match_idx:
-                        fig3, ax3 = plt.subplots(figsize=(5.0, 2.4))
-                        ax3.plot(match_idx, p1_goals, marker="o", label=f"{p1} goals")
-                        ax3.plot(match_idx, p2_goals, marker="o", label=f"{p2} goals")
+                    fig3, ax3 = plt.subplots()
+                    ax3.scatter(p1_xg_list, p1_goals, label=f"{p1} goals", marker="o")
+                    ax3.scatter(p2_xg_list, p2_goals, label=f"{p2} goals", marker="x")
+                    ax3.set_xlabel("xG in match")
+                    ax3.set_ylabel("Goals scored")
+                    ax3.set_title("Goals vs xG per match")
+                    ax3.legend()
+                    st.pyplot(fig3)
 
-                        if np.any(~np.isnan(p1_xg)):
-                            ax3.plot(
-                                match_idx,
-                                p1_xg,
-                                marker="x",
-                                linestyle="--",
-                                label=f"{p1} xG",
-                            )
-                        if np.any(~np.isnan(p2_xg)):
-                            ax3.plot(
-                                match_idx,
-                                p2_xg,
-                                marker="x",
-                                linestyle="--",
-                                label=f"{p2} xG",
-                            )
+                    # 4) Score difference trend (from p1 perspective)
+                    fig4, ax4 = plt.subplots()
+                    ax4.plot(match_idx, score_diffs, marker="o")
+                    ax4.axhline(0, linestyle="--")
+                    ax4.set_xlabel("Match (chronological)")
+                    ax4.set_ylabel("Score difference (P1 - P2)")
+                    ax4.set_title("Score difference over time (Player A perspective)")
+                    st.pyplot(fig4)
 
-                        ax3.set_xlabel("Match # (chronological)")
-                        ax3.set_ylabel("Goals / xG")
-                        ax3.legend(fontsize=8)
-                        st.pyplot(fig3, use_container_width=True)
-                        plt.close(fig3)
-                        st.markdown(
-                            "<p style='font-size:0.7rem; text-align:right; opacity:0.7;'>"
-                            "Match-by-match goals and expected goals (xG) for each player."
-                            "</p>",
-                            unsafe_allow_html=True,
-                        )
+                # ---------- ADVANCED HYBRID PREDICTION ----------
+                st.markdown("### 🔮 Advanced prediction for next 1v1")
 
-                    # 4) Score difference trend
-                    st.markdown(f"#### Score difference trend (positive = {p1} ahead)")
-                    if match_idx:
-                        fig4, ax4 = plt.subplots(figsize=(5.0, 2.4))
-                        ax4.axhline(0, color="gray", linewidth=1)
-                        ax4.plot(match_idx, score_diffs, marker="o")
-                        ax4.set_xlabel("Match # (chronological)")
-                        ax4.set_ylabel(f"{p1} − {p2}")
-                        st.pyplot(fig4, use_container_width=True)
-                        plt.close(fig4)
-                        st.markdown(
-                            "<p style='font-size:0.7rem; text-align:right; opacity:0.7;'>"
-                            "Each point is one game: above 0 = win for Player A, below 0 = win for Player B."
-                            "</p>",
-                            unsafe_allow_html=True,
-                        )
+                # 1) ELO-based probability (existing model)
+                ra, rb, prob_elo = predict_match_1v1(df_1v1, selected_game, p1, p2)
 
-                    # 5) Radar chart – rivalry profile
-                    st.markdown("#### Rivalry radar (relative per-game profile)")
-                    if match_idx:
-                        n_games = len(match_idx)
-                        win_rate_p1 = wins_p1 / n_games if n_games else 0.0
-                        win_rate_p2 = wins_p2 / n_games if n_games else 0.0
+                # 2) Head-to-head component (treat draw as 0.5 each)
+                if total_matches > 0:
+                    h2h_points_p1 = wins_p1 + 0.5 * draws
+                    h2h_points_p2 = wins_p2 + 0.5 * draws
+                    prob_h2h_p1 = h2h_points_p1 / (h2h_points_p1 + h2h_points_p2)
+                else:
+                    prob_h2h_p1 = 0.5
 
-                        luck_p1 = (gf_p1 - np.nansum(p1_xg)) if np.any(~np.isnan(p1_xg)) else 0.0
-                        luck_p2 = (gf_p2 - np.nansum(p2_xg)) if np.any(~np.isnan(p2_xg)) else 0.0
+                # 3) xG share component
+                if (total_xg_p1 + total_xg_p2) > 0:
+                    prob_xg_p1 = total_xg_p1 / (total_xg_p1 + total_xg_p2)
+                else:
+                    prob_xg_p1 = 0.5
 
-                        metrics = ["GF", "xG For", "GA", "xG Against", "Win %", "Luck (G−xG)"]
-                        vals_p1 = [avg_gf_p1, avg_xg_for_p1, avg_ga_p1, avg_xg_against_p1, win_rate_p1, luck_p1]
-                        vals_p2 = [avg_gf_p2, avg_xg_for_p2, avg_ga_p2, avg_xg_against_p2, win_rate_p2, luck_p2]
+                # Blend – you asked for 50% ELO, 30% H2H, 20% xG
+                w_elo, w_h2h, w_xg = 0.5, 0.3, 0.2
+                prob_hybrid_p1 = (
+                    w_elo * prob_elo + w_h2h * prob_h2h_p1 + w_xg * prob_xg_p1
+                )
+                prob_hybrid_p2 = 1 - prob_hybrid_p1
 
-                        max_vals = [max(abs(v1), abs(v2), 1e-6) for v1, v2 in zip(vals_p1, vals_p2)]
-                        norm_p1 = [v / m for v, m in zip(vals_p1, max_vals)]
-                        norm_p2 = [v / m for v, m in zip(vals_p2, max_vals)]
-
-                        angles = np.linspace(0, 2 * np.pi, len(metrics), endpoint=False)
-                        angles = np.concatenate((angles, [angles[0]]))
-                        norm_p1_loop = norm_p1 + [norm_p1[0]]
-                        norm_p2_loop = norm_p2 + [norm_p2[0]]
-
-                        fig_rad, ax_rad = plt.subplots(subplot_kw={"polar": True}, figsize=(5.0, 3.0))
-                        ax_rad.plot(angles, norm_p1_loop, label=p1)
-                        ax_rad.fill(angles, norm_p1_loop, alpha=0.1)
-                        ax_rad.plot(angles, norm_p2_loop, label=p2)
-                        ax_rad.fill(angles, norm_p2_loop, alpha=0.1)
-
-                        ax_rad.set_xticks(angles[:-1])
-                        ax_rad.set_xticklabels(metrics, fontsize=7)
-                        ax_rad.set_yticklabels([])
-                        ax_rad.legend(loc="upper right", bbox_to_anchor=(1.2, 1.1), fontsize=8)
-                        st.pyplot(fig_rad, use_container_width=True)
-                        plt.close(fig_rad)
-                        st.markdown(
-                            "<p style='font-size:0.7rem; text-align:right; opacity:0.7;'>"
-                            "Radar shows each player’s relative profile: scoring, xG, defence, win %, and luck."
-                            "</p>",
-                            unsafe_allow_html=True,
-                        )
-
-                            # ----- WIN PREDICTION (ELO) – OUTSIDE EXPANDER -----
-            # ----- WIN PREDICTION (hybrid model) – OUTSIDE EXPANDER -----
-            st.markdown("---")
-            st.markdown("### Win Prediction (for next 1v1)")
-            
-            # Use the internal helper so we can see all components
-            comps = _prediction_components_1v1(df_1v1, selected_game, p1, p2)
-            ra = comps["ra"]
-            rb = comps["rb"]
-            prob_a = comps["final_prob"]
-            elo_component = comps["elo_prob"]
-            h2h_component = comps["h2h_prob"]
-            xg_component = comps["xg_prob"]
-            
-            st.write("ELO rating (for this game only):")
-            st.write(f"- {p1}: **{round(ra)}**")
-            st.write(f"- {p2}: **{round(rb)}**")
-            
-            st.write("Estimated win chance next match (hybrid model):")
-            st.write(f"- **{p1}: {prob_a:.1%}**")
-            st.write(f"- **{p2}: {(1 - prob_a):.1%}**")
-            
-            # Favourite / underdog summary (same logic as before)
-            if prob_a > 0.6:
-                st.success(f"Favouring **{p1}** right now. Time for {p2} to prove the stats wrong.")
-            elif prob_a < 0.4:
-                st.success(f"Favouring **{p2}** right now. {p1}, you’re the underdog here.")
-            else:
-                st.info("This one’s tight. Either player could take it.")
-            
-            # ---- Explain the blend ----
-            st.markdown("**Model blend:** 50% ELO, 30% head-to-head (incl. last 5 games), 20% xG edge.")
-            
-            lines = []
-            lines.append(f"- ELO-only win chance for {p1}: **{elo_component:.1%}**")
-            
-            if h2h_component is not None:
-                lines.append(f"- Head-to-head / recent-form chance: **{h2h_component:.1%}**")
-            else:
-                lines.append("- Head-to-head / recent-form chance: _n/a (not enough games yet)_")
-            
-            if xg_component is not None:
-                lines.append(f"- xG-based chance (expected-goals edge): **{xg_component:.1%}**")
-            else:
-                lines.append("- xG-based chance: _n/a (no xG data yet)_")
-            
-            st.markdown("\n".join(lines))
-
-
-            # ---------- Optional team effect overlay ----------
-            st.markdown("### Optional: team-based adjustment")
-
-            total_games = wins_p1 + wins_p2 + draws
-            base_wr_p1 = wins_p1 / total_games if total_games else 0.0
-            base_wr_p2 = wins_p2 / total_games if total_games else 0.0
-
-            col_team1, col_team2 = st.columns(2)
-            with col_team1:
-                team_future_p1 = st.text_input(
-                    f"{p1} planned team (optional)", key="pred_team_p1"
-                ).strip()
-            with col_team2:
-                team_future_p2 = st.text_input(
-                    f"{p2} planned team (optional)", key="pred_team_p2"
-                ).strip()
-
-            # Helper to show effect text
-            def _describe_team_effect(player_name, base_wr, base_prob, team_name):
-                games_t, wr_t = team_win_rate_vs_opponent(h2h_df, player_name, team_name)
-                if games_t == 0:
-                    st.write(f"No past games where **{player_name}** used **{team_name}** in this matchup.")
-                    return
-
-                delta_wr = wr_t - base_wr  # positive if this team historically better
-                # convert win-rate delta into a small probability nudge
-                # scale down so a huge +40% win-rate doesn't explode the prediction
-                delta_prob = 0.25 * delta_wr  # 0.25 is a heuristic scale
-                adj_prob = max(0.05, min(0.95, base_prob + delta_prob))
-
-                sign = "+" if delta_prob >= 0 else "−"
                 st.write(
-                    f"Using **{team_name}**: {player_name} has "
-                    f"a **{wr_t:.1%}** win rate in {int(games_t)} games "
-                    f"(overall vs this opponent: {base_wr:.1%})."
+                    f"Model blend: **50% ELO**, **30% head-to-head**, **20% xG share**."
                 )
                 st.write(
-                    f"Team effect: {sign}{abs(delta_prob) * 100:.1f} pts → "
-                    f"adjusted win chance ≈ **{adj_prob:.1%}** "
-                    f"(base: {base_prob:.1%})."
+                    f"- ELO model favours **{p1}** at {prob_elo:.1%} "
+                    f"(ELO {round(ra)} vs {round(rb)})"
+                )
+                st.write(
+                    f"- Head-to-head points give **{p1}** about {prob_h2h_p1:.1%} chance."
+                )
+                st.write(
+                    f"- xG share across these matches gives **{p1}** about {prob_xg_p1:.1%} chance."
                 )
 
-            # Show effect for Player A (if a future team is provided)
-            if team_future_p1:
-                _describe_team_effect(p1, base_wr_p1, prob_a, team_future_p1)
+                st.markdown("**Blended prediction for next match:**")
+                st.write(f"- **{p1}: {prob_hybrid_p1:.1%}**")
+                st.write(f"- **{p2}: {prob_hybrid_p2:.1%}**")
 
-            # Show effect for Player B (if a future team is provided)
-            if team_future_p2:
-                base_prob_b = 1.0 - prob_a
-                _describe_team_effect(p2, base_wr_p2, base_prob_b, team_future_p2)
+                if prob_hybrid_p1 > 0.6:
+                    st.success(f"Overall, **{p1}** is the favourite in this matchup.")
+                elif prob_hybrid_p1 < 0.4:
+                    st.success(f"Overall, **{p2}** is the favourite in this matchup.")
+                else:
+                    st.info("This looks like a pretty even matchup on all models.")
 
 
 # ---------- PAGE: HEAD-TO-HEAD (2v2) ----------
@@ -2101,880 +1959,284 @@ elif page == "Head-to-Head (2v2)":
     st.subheader(f"👥 2v2 Head-to-Head – {selected_game}")
 
     if df_2v2_game.empty:
-        st.info(f"Need some 2v2 matches recorded for {selected_game}.")
+        st.info(f"No 2v2 matches yet for {selected_game}.")
     else:
-        import re
-        import numpy as np
-        import pandas as pd
-
-        # --- Build canonical, order-independent lineup keys from team1_players/team2_players ---
-        def normalize_lineup(players_str: str) -> str:
-            if not isinstance(players_str, str):
-                return ""
-            # Split on & , or / and sort names so order doesn't matter
-            parts = re.split(r"[&,/]", players_str)
-            names = [p.strip() for p in parts if p.strip()]
-            return " & ".join(sorted(names))
-
-        df2 = df_2v2_game.copy()
-        df2["team1_lineup_key"] = df2["team1_players"].astype(str).apply(normalize_lineup)
-        df2["team2_lineup_key"] = df2["team2_players"].astype(str).apply(normalize_lineup)
-
-        # All unique lineups seen in this game
-        lineups_all = sorted(
-            set(df2["team1_lineup_key"].dropna().unique()).union(
-                set(df2["team2_lineup_key"].dropna().unique())
+        # Unique line-up strings
+        all_lineups = sorted(
+            set(df_2v2_game["team1_players"].dropna().unique()).union(
+                set(df_2v2_game["team2_players"].dropna().unique())
             )
         )
 
-        if len(lineups_all) < 2:
-            st.info("Need at least two different 2v2 lineups to compare.")
-        else:
-            col1, col2 = st.columns(2)
-            with col1:
-                lineup_A = st.selectbox("Lineup A", lineups_all, key="h2h_2v2_A")
-            with col2:
-                lineup_B = st.selectbox(
-                    "Lineup B",
-                    [l for l in lineups_all if l != lineup_A],
-                    key="h2h_2v2_B",
+        col1, col2 = st.columns(2)
+        with col1:
+            team1_players = st.selectbox("Team A line-up", all_lineups, key="h2h2v2_a")
+        with col2:
+            team2_players = st.selectbox(
+                "Team B line-up",
+                [t for t in all_lineups if t != team1_players],
+                key="h2h2v2_b",
+            )
+
+        if team1_players and team2_players:
+            # Filter this matchup
+            h2h_df_2v2 = df_2v2_game[
+                (
+                    (df_2v2_game["team1_players"] == team1_players)
+                    & (df_2v2_game["team2_players"] == team2_players)
                 )
-
-            if lineup_A and lineup_B:
-                # --- Head-to-head slice: all matches where A vs B (order-independent) ---
-                mask_ab = (
-                    (df2["team1_lineup_key"] == lineup_A) & (df2["team2_lineup_key"] == lineup_B)
+                | (
+                    (df_2v2_game["team1_players"] == team2_players)
+                    & (df_2v2_game["team2_players"] == team1_players)
                 )
-                mask_ba = (
-                    (df2["team1_lineup_key"] == lineup_B) & (df2["team2_lineup_key"] == lineup_A)
-                )
-                h2h_df_2v2 = df2[mask_ab | mask_ba].copy().sort_values("date")
+            ].copy()
 
-                st.markdown(f"### {lineup_A} vs {lineup_B} – {selected_game}")
+            st.markdown(f"### {team1_players} vs {team2_players}")
 
-                if h2h_df_2v2.empty:
-                    st.info("No 2v2 matches between these two lineups yet for this game.")
-                else:
-                    # ---------- Aggregate stats from each lineup's perspective ----------
-                    def _aggregate_lineup(df, focus_lineup_key: str):
-                        gf = ga = 0
-                        xg_for = xg_against = 0.0
-                        margins_signed = []
-                        margins_abs = []
-                        match_idx = []
-                        goals_series = []
-                        xg_series = []
+            if h2h_df_2v2.empty:
+                st.info("No 2v2 matches recorded for this exact line-up matchup yet.")
+            else:
+                h2h_df_2v2 = h2h_df_2v2.sort_values("date").reset_index(drop=True)
 
-                        for _, row in df.iterrows():
-                            if row["team1_lineup_key"] == focus_lineup_key:
-                                gf_match = row["score1"]
-                                ga_match = row["score2"]
-                                xg_for_match = row.get("xG1", np.nan)
-                                xg_again_match = row.get("xG2", np.nan)
-                            else:  # focus lineup must be team2
-                                gf_match = row["score2"]
-                                ga_match = row["score1"]
-                                xg_for_match = row.get("xG2", np.nan)
-                                xg_again_match = row.get("xG1", np.nan)
+                # Summary from Team A perspective
+                wins_a = 0
+                wins_b = 0
+                draws = 0
+                goal_margins_abs = []
+                idx = []
+                diff_trend = []
 
-                            gf += gf_match
-                            ga += ga_match
+                for i, row in h2h_df_2v2.iterrows():
+                    s1, s2 = row["score1"], row["score2"]
 
-                            if not np.isnan(xg_for_match):
-                                xg_for += xg_for_match
-                            if not np.isnan(xg_again_match):
-                                xg_against += xg_again_match
+                    if row["team1_players"] == team1_players:
+                        g_a, g_b = s1, s2
+                    else:
+                        g_a, g_b = s2, s1
 
-                            diff = gf_match - ga_match
-                            margins_signed.append(diff)
-                            margins_abs.append(abs(diff))
-                            goals_series.append(gf_match)
-                            xg_series.append(xg_for_match)
-                            match_idx.append(len(match_idx) + 1)
+                    if g_a > g_b:
+                        wins_a += 1
+                    elif g_a < g_b:
+                        wins_b += 1
+                    else:
+                        draws += 1
 
-                        n = len(df) if len(df) else 1
-                        return {
-                            "gf": gf,
-                            "ga": ga,
-                            "xg_for": xg_for,
-                            "xg_against": xg_against,
-                            "avg_gf": gf / n,
-                            "avg_ga": ga / n,
-                            "avg_xg_for": xg_for / n,
-                            "avg_xg_against": xg_against / n,
-                            "margins_signed": margins_signed,
-                            "margins_abs": margins_abs,
-                            "match_idx": match_idx,
-                            "goals_series": goals_series,
-                            "xg_series": xg_series,
-                        }
+                    margin = g_a - g_b
+                    goal_margins_abs.append(abs(margin))
+                    idx.append(i + 1)
+                    diff_trend.append(margin)
 
-                    stats_A = _aggregate_lineup(h2h_df_2v2, lineup_A)
-                    stats_B = _aggregate_lineup(h2h_df_2v2, lineup_B)
+                total_matches = len(h2h_df_2v2)
 
-                    # ---------- W/D/L counts ----------
-                    wins_A = wins_B = draws_2v2 = 0
-                    for _, row in h2h_df_2v2.iterrows():
-                        # align goals so "A" is always lineup_A
-                        if row["team1_lineup_key"] == lineup_A:
-                            gA, gB = row["score1"], row["score2"]
-                        else:
-                            gA, gB = row["score2"], row["score1"]
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    st.metric(
+                        f"{team1_players} record",
+                        f"{wins_a}W–{draws}D–{wins_b}L",
+                        help="From Team A line-up perspective",
+                    )
+                with c2:
+                    st.metric(
+                        "Total matches",
+                        total_matches,
+                    )
+                with c3:
+                    st.metric(
+                        "Average goal margin (A - B)",
+                        f"{np.mean(diff_trend):.2f}",
+                    )
 
-                        if gA > gB:
-                            wins_A += 1
-                        elif gA < gB:
-                            wins_B += 1
-                        else:
-                            draws_2v2 += 1
+                st.markdown("---")
 
-                    total_games_2v2 = wins_A + wins_B + draws_2v2
-                    if total_games_2v2 == 0:
-                        st.info("No valid match data for this rivalry.")
-                        st.stop()
-
-                    # ---------- Top-line metrics ----------
-                    colL, colM, colR = st.columns(3)
-                    colL.metric(f"{lineup_A} wins", wins_A)
-                    colM.metric("Draws", draws_2v2)
-                    colR.metric(f"{lineup_B} wins", wins_B)
-
-                    # ---------- Rivalry summary for each lineup ----------
-                    colS1, colS2 = st.columns(2)
-                    with colS1:
-                        st.markdown(f"**{lineup_A} rivalry summary**")
-                        st.write(
-                            f"- Games: {total_games_2v2}\n"
-                            f"- Goals for: {stats_A['gf']} (avg {stats_A['avg_gf']:.2f})\n"
-                            f"- Goals against: {stats_A['ga']} (avg {stats_A['avg_ga']:.2f})\n"
-                            f"- xG for: {stats_A['xg_for']:.2f} (avg {stats_A['avg_xg_for']:.2f})\n"
-                            f"- xG against: {stats_A['xg_against']:.2f} (avg {stats_A['avg_xg_against']:.2f})"
-                        )
-
-                    with colS2:
-                        st.markdown(f"**{lineup_B} rivalry summary**")
-                        st.write(
-                            f"- Games: {total_games_2v2}\n"
-                            f"- Goals for: {stats_B['gf']} (avg {stats_B['avg_gf']:.2f})\n"
-                            f"- Goals against: {stats_B['ga']} (avg {stats_B['avg_ga']:.2f})\n"
-                            f"- xG for: {stats_B['xg_for']:.2f} (avg {stats_B['avg_xg_for']:.2f})\n"
-                            f"- xG against: {stats_B['xg_against']:.2f} (avg {stats_B['avg_xg_against']:.2f})"
-                        )
-
-                    # ---------- Last 5 meetings (from lineup_A perspective) ----------
-                    last5 = h2h_df_2v2.tail(5)
-                    form_symbols = []
-                    for _, row in last5.iterrows():
-                        if row["team1_lineup_key"] == lineup_A:
-                            gA, gB = row["score1"], row["score2"]
-                        else:
-                            gA, gB = row["score2"], row["score1"]
-
-                        if gA == gB:
-                            form_symbols.append("D")
-                        elif gA > gB:
-                            form_symbols.append("W")
-                        else:
-                            form_symbols.append("L")
-
-                    if form_symbols:
-                        st.markdown(
-                            f"**Last 5 (from {lineup_A} perspective):** "
-                            + " · ".join(form_symbols[::-1])
-                        )
-
-                # ---------- Line-ups and clubs used ----------
+                # Line-ups + clubs used table
                 st.markdown("### Line-ups and clubs used in this matchup")
 
-                import pandas as pd  # safe even if already imported at top
-
-                def _lineup_table(df: pd.DataFrame, focus_lineup_key: str) -> pd.DataFrame:
-                    """
-                    For a given lineup key (e.g. 'Harman + Navdeep'), show
-                    which club they used and how they performed.
-                    """
-                    records = []
-
-                    for _, row in df.iterrows():
-                        if row["team1_lineup_key"] == focus_lineup_key:
-                            lineup = row.get("team1_players", "")
-                            club = row.get("team1_name", "")
-                            gf = row["score1"]
-                            ga = row["score2"]
-                        elif row["team2_lineup_key"] == focus_lineup_key:
-                            lineup = row.get("team2_players", "")
-                            club = row.get("team2_name", "")
-                            gf = row["score2"]
-                            ga = row["score1"]
+                def _lineup_table(df, focus_lineup):
+                    rows = []
+                    for _, r in df.iterrows():
+                        if r["team1_players"] == focus_lineup:
+                            club = r.get("team1_name", "")
+                            g_for, g_against = r["score1"], r["score2"]
                         else:
-                            continue
-
-                        records.append(
+                            club = r.get("team2_name", "")
+                            g_for, g_against = r["score2"], r["score1"]
+                        xg_for = r.get("xG1", 0.0) or 0.0
+                        xg_against = r.get("xG2", 0.0) or 0.0
+                        rows.append(
                             {
-                                "lineup": lineup,
                                 "club": club,
-                                "goals_for": gf,
-                                "goals_against": ga,
+                                "goals_for": g_for,
+                                "goals_against": g_against,
+                                "xg_for": xg_for,
+                                "xg_against": xg_against,
                             }
                         )
 
-                    if not records:
-                        return pd.DataFrame()
-
-                    tab = pd.DataFrame(records)
-                    tab = (
-                        tab.groupby(["lineup", "club"])
-                        .agg(
-                            games=("goals_for", "count"),
-                            goals_for=("goals_for", "sum"),
-                            goals_against=("goals_against", "sum"),
+                    if not rows:
+                        return pd.DataFrame(
+                            columns=[
+                                "club",
+                                "games",
+                                "goals_for",
+                                "goals_against",
+                                "xg_for",
+                                "xg_against",
+                            ]
                         )
-                        .reset_index()
+                    tmp = pd.DataFrame(rows)
+                    grouped = tmp.groupby("club").agg(
+                        games=("goals_for", "count"),
+                        goals_for=("goals_for", "sum"),
+                        goals_against=("goals_against", "sum"),
+                        xg_for=("xg_for", "sum"),
+                        xg_against=("xg_against", "sum"),
                     )
-                    tab["avg_goals_for"] = tab["goals_for"] / tab["games"]
-                    tab["avg_goals_against"] = tab["goals_against"] / tab["games"]
-                    return tab
+                    grouped = grouped.reset_index()
+                    return grouped
 
-                tab_A = _lineup_table(h2h_df_2v2, lineup_A)
-                tab_B = _lineup_table(h2h_df_2v2, lineup_B)
+                col_l, col_r = st.columns(2)
+                with col_l:
+                    st.markdown(f"**{team1_players} – clubs & record**")
+                    tab_a = _lineup_table(h2h_df_2v2, team1_players)
+                    st.dataframe(tab_a, use_container_width=True)
+                with col_r:
+                    st.markdown(f"**{team2_players} – clubs & record**")
+                    tab_b = _lineup_table(h2h_df_2v2, team2_players)
+                    st.dataframe(tab_b, use_container_width=True)
 
-                colT1, colT2 = st.columns(2)
-                with colT1:
-                    st.markdown(f"**{lineup_A} – clubs & record**")
-                    if tab_A.empty:
-                        st.write("No line-up data recorded.")
-                    else:
-                        st.dataframe(
-                            tab_A[
-                                [
-                                    "club",
-                                    "games",
-                                    "goals_for",
-                                    "goals_against",
-                                    "avg_goals_for",
-                                    "avg_goals_against",
-                                ]
-                            ].style.format(
-                                {
-                                    "avg_goals_for": "{:.2f}",
-                                    "avg_goals_against": "{:.2f}",
-                                }
-                            ),
-                            use_container_width=True,
-                        )
+                st.markdown("---")
 
-                with colT2:
-                    st.markdown(f"**{lineup_B} – clubs & record**")
-                    if tab_B.empty:
-                        st.write("No line-up data recorded.")
-                    else:
-                        st.dataframe(
-                            tab_B[
-                                [
-                                    "club",
-                                    "games",
-                                    "goals_for",
-                                    "goals_against",
-                                    "avg_goals_for",
-                                    "avg_goals_against",
-                                ]
-                            ].style.format(
-                                {
-                                    "avg_goals_for": "{:.2f}",
-                                    "avg_goals_against": "{:.2f}",
-                                }
-                            ),
-                            use_container_width=True,
-                        )
-
-                # ---------- Match history ----------
+                # Match history
                 st.markdown("### Match history")
-                st.dataframe(
-                    h2h_df_2v2[
-                        [
-                            "date",
-                            "team1_name",
-                            "team1_players",
-                            "score1",
-                            "xG1",
-                            "score2",
-                            "xG2",
-                            "team2_players",
-                            "team2_name",
-                        ]
-                    ].sort_values(by="date", ascending=False),
-                    use_container_width=True,
-                )
+                cols_mh = [
+                    "date",
+                    "team1_name",
+                    "team1_players",
+                    "score1",
+                    "xG1",
+                    "team2_name",
+                    "team2_players",
+                    "score2",
+                    "xG2",
+                ]
+                mh2 = h2h_df_2v2[cols_mh].copy()
+                mh2["date"] = pd.to_datetime(mh2["date"]).dt.strftime("%Y-%m-%d")
+                st.dataframe(mh2, use_container_width=True)
 
-# ----------------- CHARTS IN EXPANDER -----------------
-with st.expander("📊 Show charts"):
+                with st.expander("📊 Show charts"):
+                    fig1, ax1 = plt.subplots()
+                    ax1.bar(
+                        [f"Wins\n{team1_players}", "Draws", f"Wins\n{team2_players}"],
+                        [wins_a, draws, wins_b],
+                    )
+                    ax1.set_ylabel("Matches")
+                    ax1.set_title("2v2 win / draw counts")
+                    st.pyplot(fig1)
 
-    # Recompute stats for charting so this block is self-contained
-    stats_chart_t1 = _aggregate_side(h2h_df_2v2, t1)
-    stats_chart_t2 = _aggregate_side(h2h_df_2v2, t2)
-
-    goal_margins_abs = stats_chart_t1["margins_abs"]
-    match_idx = stats_chart_t1["match_idx"]
-    t1_goals = stats_chart_t1["goals_series"]
-    t2_goals = stats_chart_t2["goals_series"]
-    t1_xg = np.array(stats_chart_t1["xg_series"], dtype=float)
-    t2_xg = np.array(stats_chart_t2["xg_series"], dtype=float)
-    score_diffs = stats_chart_t1["margins_signed"]
-
-    # 1) Wins / draws bar
-    c1, c2 = st.columns(2)
-    with c1:
-        fig, ax = plt.subplots(figsize=(4.0, 2.3))
-        ax.bar([t1, t2, "Draws"], [wins_t1, wins_t2, draws_2v2])
-        ax.set_ylabel("Games")
-        ax.set_title("Wins / draws")
-        ax.text(
-            0.99,
-            0.02,
-            "Counts of wins/draws in this 2v2 head-to-head.",
-            transform=ax.transAxes,
-            ha="right",
-            va="bottom",
-            fontsize=7,
-            color="#cccccc",
-            alpha=0.8,
-        )
-        st.pyplot(fig, use_container_width=True)
-        plt.close(fig)
-
-    # 2) Goal margin distribution
-    with c2:
-        fig2, ax2 = plt.subplots(figsize=(4.0, 2.3))
-        ones = sum(1 for m in goal_margins_abs if m == 1)
-        twos = sum(1 for m in goal_margins_abs if m == 2)
-        big = sum(1 for m in goal_margins_abs if m >= 3)
-        labels = ["1 goal", "2 goals", "3+ goals"]
-        counts = [ones, twos, big]
-        ax2.bar(labels, counts)
-        ax2.set_ylabel("Games")
-        ax2.set_title("Scoreline spread")
-        ax2.text(
-            0.99,
-            0.02,
-            "How often games are decided by 1, 2, or 3+ goals.",
-            transform=ax2.transAxes,
-            ha="right",
-            va="bottom",
-            fontsize=7,
-            color="#cccccc",
-            alpha=0.8,
-        )
-        st.pyplot(fig2, use_container_width=True)
-        plt.close(fig2)
-
-    # 3) Goals & xG per match over time
-    st.markdown("#### Goals and xG per match over time")
-    if match_idx:
-        fig3, ax3 = plt.subplots(figsize=(6, 2.6))
-        ax3.plot(match_idx, t1_goals, marker="o", label=f"{t1} goals")
-        ax3.plot(match_idx, t2_goals, marker="o", label=f"{t2} goals")
-
-        if np.any(~np.isnan(t1_xg)):
-            ax3.plot(
-                match_idx,
-                t1_xg,
-                marker="x",
-                linestyle="--",
-                label=f"{t1} xG",
-            )
-        if np.any(~np.isnan(t2_xg)):
-            ax3.plot(
-                match_idx,
-                t2_xg,
-                marker="x",
-                linestyle="--",
-                label=f"{t2} xG",
-            )
-
-        ax3.set_xlabel("Match # (chronological)")
-        ax3.set_ylabel("Goals / xG")
-        ax3.legend(fontsize=8)
-        ax3.text(
-            0.99,
-            0.02,
-            "Match-by-match goals and expected goals.",
-            transform=ax3.transAxes,
-            ha="right",
-            va="bottom",
-            fontsize=7,
-            color="#cccccc",
-            alpha=0.8,
-        )
-        st.pyplot(fig3, use_container_width=True)
-        plt.close(fig3)
-
-    # 4) Score difference trend
-    st.markdown(f"#### Score difference trend (positive = {t1} ahead)")
-    if match_idx:
-        fig4, ax4 = plt.subplots(figsize=(6, 2.6))
-        ax4.axhline(0, color="gray", linewidth=1)
-        ax4.plot(match_idx, score_diffs, marker="o")
-        ax4.set_xlabel("Match # (chronological)")
-        ax4.set_ylabel(f"{t1} − {t2}")
-        st.pyplot(fig4, use_container_width=True)
-        plt.close(fig4)
-        st.markdown(
-            "<p style='font-size:0.7rem; text-align:right; opacity:0.7;'>"
-            "Each point is one 2v2 game: above 0 = win for Team A, below 0 = win for Team B."
-            "</p>",
-            unsafe_allow_html=True,
-        )
+                    fig2, ax2 = plt.subplots()
+                    ax2.hist(
+                        goal_margins_abs,
+                        bins=range(0, max(goal_margins_abs) + 2),
+                    )
+                    ax2.set_xlabel("Absolute goal margin")
+                    ax2.set_ylabel("Matches")
+                    ax2.set_title("Goal margin distribution")
+                    st.pyplot(fig2)
 
 
-
-        # ---------- Upgraded prediction: win rate + xG edge ----------
-        st.markdown("---")
-        st.markdown("### Win Prediction (for next 2v2)")
-    
-        base_wr_A = wins_A / total_games_2v2
-        base_wr_B = wins_B / total_games_2v2
-    
-        avg_xg_for_A = stats_A["avg_xg_for"]
-        avg_xg_for_B = stats_B["avg_xg_for"]
-    
-        # xG edge per game (A − B)
-        xg_edge = avg_xg_for_A - avg_xg_for_B
-    
-        # Combine into a single score:
-        #   0.5 baseline
-        #   + 0.35 * (win-rate diff)
-        #   + 0.15 * (xG edge)
-        raw_score = 0.5 + 0.35 * (base_wr_A - base_wr_B) + 0.15 * xg_edge
-    
-        # Clamp between 5% and 95%
-        prob_A = max(0.05, min(0.95, raw_score))
-        prob_B = 1.0 - prob_A
-    
-        st.write("This prediction uses:")
-        st.write(
-            "- Historic 2v2 win rates in this rivalry\n"
-            "- Average xG advantage between the lineups"
-        )
-        st.write("Estimated win chance next match:")
-        st.write(f"- **{lineup_A}: {prob_A:.1%}**")
-        st.write(f"- **{lineup_B}: {prob_B:.1%}**")
-    
-        if prob_A > 0.6:
-            st.success(
-                f"Stats favour **{lineup_A}** right now. "
-                f"Perfect chance for **{lineup_B}** to play spoiler 👀"
-            )
-        elif prob_A < 0.4:
-            st.success(
-                f"Stats favour **{lineup_B}** right now. "
-                f"**{lineup_A}** comes in as the underdog."
-            )
-        else:
-            st.info("This rivalry looks tight. Either lineup could take it.")
 # ---------- PAGE: HEAD-TO-HEAD (2v1) ----------
 elif page == "Head-to-Head (2v1)":
     st.subheader(f"⚔️ 2v1 Head-to-Head – {selected_game}")
 
-    # Assume df_2v1 has been loaded and filtered to df_2v1_game earlier,
-    # with columns something like:
-    # date, game, team1_name, team1_players, score1, xG1, result1,
-    # team2_name, team2_players, score2, xG2, result2
-
     if df_2v1_game.empty:
-        st.info(f"Need some 2v1 matches recorded for {selected_game}.")
+        st.info(f"No 2v1 matches yet for {selected_game}.")
     else:
-        # Team side is always the 2-player side; solo is the single player.
-        pairs = sorted(df_2v1_game["team1_players"].dropna().unique())
-        solos = sorted(df_2v1_game["team2_players"].dropna().unique())
+        attackers = sorted(df_2v1_game["team1_players"].dropna().unique())
+        defenders = sorted(df_2v1_game["team2_players"].dropna().unique())
 
         col1, col2 = st.columns(2)
         with col1:
-            pair_selected = st.selectbox("2-player side", pairs, key="h2h_2v1_pair")
+            atk = st.selectbox("Attacking duo", attackers, key="h2h2v1_atk")
         with col2:
-            solo_selected = st.selectbox("Solo player", solos, key="h2h_2v1_solo")
+            dfd = st.selectbox(
+                "Solo defender",
+                [x for x in defenders if x],
+                key="h2h2v1_def",
+            )
 
-        if pair_selected and solo_selected:
+        if atk and dfd:
             h2h_df_2v1 = df_2v1_game[
-                (df_2v1_game["team1_players"] == pair_selected)
-                & (df_2v1_game["team2_players"] == solo_selected)
-            ].copy().sort_values("date")
+                (df_2v1_game["team1_players"] == atk)
+                & (df_2v1_game["team2_players"] == dfd)
+            ].copy()
 
-            st.markdown(f"### {pair_selected} vs {solo_selected} – {selected_game}")
+            st.markdown(f"### {atk} (2-player side) vs {dfd} (solo)")
 
             if h2h_df_2v1.empty:
-                st.info("No 2v1 matches between this pair and this solo player yet.")
+                st.info("No 2v1 matches yet for this exact duo vs solo combo.")
             else:
-                # ----- basic W/D/L -----
-                wins_pair = (h2h_df_2v1["score1"] > h2h_df_2v1["score2"]).sum()
-                wins_solo = (h2h_df_2v1["score2"] > h2h_df_2v1["score1"]).sum()
-                draws_2v1 = (h2h_df_2v1["score1"] == h2h_df_2v1["score2"]).sum()
-                total_games_2v1 = len(h2h_df_2v1)
+                h2h_df_2v1 = h2h_df_2v1.sort_values("date").reset_index(drop=True)
 
-                colL, colM, colR = st.columns(3)
-                colL.metric(f"{pair_selected} wins", int(wins_pair))
-                colM.metric("Draws", int(draws_2v1))
-                colR.metric(f"{solo_selected} wins", int(wins_solo))
+                wins_atk = (h2h_df_2v1["result1"] == "W").sum()
+                wins_def = (h2h_df_2v1["result2"] == "W").sum()
+                draws = (h2h_df_2v1["result1"] == "D").sum()
 
-                # ----- aggregate stats with xG -----
-                def _agg_2v1(df, side="pair"):
-                    if side == "pair":
-                        gf_col, ga_col = "score1", "score2"
-                        xg_for_col, xg_against_col = "xG1", "xG2"
-                    else:
-                        gf_col, ga_col = "score2", "score1"
-                        xg_for_col, xg_against_col = "xG2", "xG1"
-
-                    gf = df[gf_col].sum()
-                    ga = df[ga_col].sum()
-                    xg_for = df[xg_for_col].fillna(0.0).sum()
-                    xg_against = df[xg_against_col].fillna(0.0).sum()
-                    n = len(df) if len(df) else 1
-
-                    return {
-                        "gf": gf,
-                        "ga": ga,
-                        "xg_for": xg_for,
-                        "xg_against": xg_against,
-                        "avg_gf": gf / n,
-                        "avg_ga": ga / n,
-                        "avg_xg_for": xg_for / n,
-                        "avg_xg_against": xg_against / n,
-                    }
-
-                stats_pair = _agg_2v1(h2h_df_2v1, "pair")
-                stats_solo = _agg_2v1(h2h_df_2v1, "solo")
-
-                colS1, colS2 = st.columns(2)
-                with colS1:
-                    st.markdown(
-                        f"**{pair_selected} vs {solo_selected}:** "
-                        f"{stats_pair['gf']} goals scored, {stats_pair['ga']} conceded "
-                        f"in {total_games_2v1} games "
-                        f"(_avg {stats_pair['avg_gf']:.2f} scored, {stats_pair['avg_ga']:.2f} conceded; "
-                        f"xG {stats_pair['avg_xg_for']:.2f} for, {stats_pair['avg_xg_against']:.2f} against_)."
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    st.metric(
+                        f"{atk} record",
+                        f"{wins_atk}W–{draws}D–{wins_def}L",
                     )
-                with colS2:
-                    st.markdown(
-                        f"**{solo_selected} vs {pair_selected}:** "
-                        f"{stats_solo['gf']} goals scored, {stats_solo['ga']} conceded "
-                        f"in {total_games_2v1} games "
-                        f"(_avg {stats_solo['avg_gf']:.2f} scored, {stats_solo['avg_ga']:.2f} conceded; "
-                        f"xG {stats_solo['avg_xg_for']:.2f} for, {stats_solo['avg_xg_against']:.2f} against_)."
+                with c2:
+                    st.metric("Total matches", len(h2h_df_2v1))
+                with c3:
+                    st.metric(
+                        "Avg goals for duo",
+                        f"{h2h_df_2v1['score1'].mean():.2f}",
                     )
 
-                # last-5 form from pair perspective
-                last5 = h2h_df_2v1.tail(5)
-                form_symbols = []
-                for _, row in last5.iterrows():
-                    if row["score1"] == row["score2"]:
-                        form_symbols.append("D")
-                    elif row["score1"] > row["score2"]:
-                        form_symbols.append("W")
-                    else:
-                        form_symbols.append("L")
-                if form_symbols:
-                    st.markdown(
-                        f"**Last 5 (from {pair_selected} perspective):** "
-                        + " · ".join(form_symbols[::-1])
-                    )
+                st.markdown("---")
 
-                # ----- line-ups & clubs used -----
-                st.markdown("### Line-ups and clubs used in this matchup")
-
-                def _club_table(df, side="pair"):
-                    records = []
-                    for _, row in df.iterrows():
-                        if side == "pair":
-                            club = row.get("team1_name", "")
-                            lineup = row.get("team1_players", "")
-                            gf, ga = row["score1"], row["score2"]
-                        else:
-                            club = row.get("team2_name", "")
-                            lineup = row.get("team2_players", "")
-                            gf, ga = row["score2"], row["score1"]
-                        records.append({"club": club, "lineup": lineup, "gf": gf, "ga": ga})
-                    if not records:
-                        return pd.DataFrame()
-                    tab = (
-                        pd.DataFrame(records)
-                        .groupby(["club", "lineup"])
-                        .agg(
-                            games=("gf", "count"),
-                            goals_for=("gf", "sum"),
-                            goals_against=("ga", "sum"),
-                        )
-                        .reset_index()
-                    )
-                    tab["avg_goals_for"] = tab["goals_for"] / tab["games"]
-                    tab["avg_goals_against"] = tab["goals_against"] / tab["games"]
-                    return tab
-
-                tab_pair = _club_table(h2h_df_2v1, "pair")
-                tab_solo = _club_table(h2h_df_2v1, "solo")
-
-                colC1, colC2 = st.columns(2)
-                with colC1:
-                    st.markdown(f"**{pair_selected} – clubs & record**")
-                    if tab_pair.empty:
-                        st.write("No club data recorded.")
-                    else:
-                        st.dataframe(
-                            tab_pair[
-                                [
-                                    "club",
-                                    "lineup",
-                                    "games",
-                                    "goals_for",
-                                    "goals_against",
-                                    "avg_goals_for",
-                                    "avg_goals_against",
-                                ]
-                            ].style.format(
-                                {
-                                    "avg_goals_for": "{:.2f}",
-                                    "avg_goals_against": "{:.2f}",
-                                }
-                            ),
-                            use_container_width=True,
-                        )
-                with colC2:
-                    st.markdown(f"**{solo_selected} – clubs & record**")
-                    if tab_solo.empty:
-                        st.write("No club data recorded.")
-                    else:
-                        st.dataframe(
-                            tab_solo[
-                                [
-                                    "club",
-                                    "lineup",
-                                    "games",
-                                    "goals_for",
-                                    "goals_against",
-                                    "avg_goals_for",
-                                    "avg_goals_against",
-                                ]
-                            ].style.format(
-                                {
-                                    "avg_goals_for": "{:.2f}",
-                                    "avg_goals_against": "{:.2f}",
-                                }
-                            ),
-                            use_container_width=True,
-                        )
-
-                # ----- match history -----
                 st.markdown("### Match history")
-                st.dataframe(
-                    h2h_df_2v1[
-                        [
-                            "date",
-                            "team1_name",
-                            "team1_players",
-                            "score1",
-                            "xG1",
-                            "score2",
-                            "xG2",
-                            "team2_players",
-                            "team2_name",
-                        ]
-                    ].sort_values(by="date", ascending=False),
-                    use_container_width=True,
-                )
+                cols_2v1 = [
+                    "date",
+                    "team1_name",
+                    "team1_players",
+                    "score1",
+                    "xG1",
+                    "team2_name",
+                    "team2_players",
+                    "score2",
+                    "xG2",
+                ]
+                mh_2v1 = h2h_df_2v1[cols_2v1].copy()
+                mh_2v1["date"] = pd.to_datetime(mh_2v1["date"]).dt.strftime("%Y-%m-%d")
+                st.dataframe(mh_2v1, use_container_width=True)
 
-                # ----- simple charts in expander -----
-                with st.expander("📊 Show charts"):
-                    margins = (h2h_df_2v1["score1"] - h2h_df_2v1["score2"]).tolist()
-                    margins_abs = [abs(x) for x in margins]
-                    match_idx = list(range(1, len(h2h_df_2v1) + 1))
-                    pair_goals = h2h_df_2v1["score1"].tolist()
-                    solo_goals = h2h_df_2v1["score2"].tolist()
-                    pair_xg = h2h_df_2v1["xG1"].astype(float).tolist()
-                    solo_xg = h2h_df_2v1["xG2"].astype(float).tolist()
-
-                    # wins / draws
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        fig, ax = plt.subplots(figsize=(4.0, 2.3))
-                        ax.bar(
-                            [pair_selected, solo_selected, "Draws"],
-                            [wins_pair, wins_solo, draws_2v1],
-                        )
-                        ax.set_ylabel("Games")
-                        ax.set_title("Wins / draws")
-                        ax.text(
-                            0.99,
-                            0.02,
-                            "Counts of wins/draws in this 2v1 head-to-head.",
-                            transform=ax.transAxes,
-                            ha="right",
-                            va="bottom",
-                            fontsize=7,
-                            color="#cccccc",
-                            alpha=0.8,
-                        )
-                        st.pyplot(fig, use_container_width=True)
-                        plt.close(fig)
-
-                    # scoreline spread
-                    with c2:
-                        fig2, ax2 = plt.subplots(figsize=(4.0, 2.3))
-                        ones = sum(1 for m in margins_abs if m == 1)
-                        twos = sum(1 for m in margins_abs if m == 2)
-                        big = sum(1 for m in margins_abs if m >= 3)
-                        labels = ["1 goal", "2 goals", "3+ goals"]
-                        counts = [ones, twos, big]
-                        ax2.bar(labels, counts)
-                        ax2.set_ylabel("Games")
-                        ax2.set_title("Scoreline spread")
-                        ax2.text(
-                            0.99,
-                            0.02,
-                            "How often 2v1 games are decided by 1, 2, or 3+ goals.",
-                            transform=ax2.transAxes,
-                            ha="right",
-                            va="bottom",
-                            fontsize=7,
-                            color="#cccccc",
-                            alpha=0.8,
-                        )
-                        st.pyplot(fig2, use_container_width=True)
-                        plt.close(fig2)
-
-                    # goals & xG over time
-                    st.markdown("#### Goals and xG per match over time")
-                    if match_idx:
-                        fig3, ax3 = plt.subplots(figsize=(6, 2.6))
-                        ax3.plot(match_idx, pair_goals, marker="o", label=f"{pair_selected} goals")
-                        ax3.plot(match_idx, solo_goals, marker="o", label=f"{solo_selected} goals")
-
-                        if any(not math.isnan(x) for x in pair_xg):
-                            ax3.plot(match_idx, pair_xg, linestyle="--", marker="x", label=f"{pair_selected} xG")
-                        if any(not math.isnan(x) for x in solo_xg):
-                            ax3.plot(match_idx, solo_xg, linestyle="--", marker="x", label=f"{solo_selected} xG")
-
-                        ax3.set_xlabel("Match # (chronological)")
-                        ax3.set_ylabel("Goals / xG")
-                        ax3.legend(fontsize=8)
-                        ax3.text(
-                            0.99,
-                            0.02,
-                            "Match-by-match goals and expected goals.",
-                            transform=ax3.transAxes,
-                            ha="right",
-                            va="bottom",
-                            fontsize=7,
-                            color="#cccccc",
-                            alpha=0.8,
-                        )
-                        st.pyplot(fig3, use_container_width=True)
-                        plt.close(fig3)
-
-                    # score difference trend
-                    st.markdown(f"#### Score difference trend (positive = {pair_selected} ahead)")
-                    if match_idx:
-                        fig4, ax4 = plt.subplots(figsize=(6, 2.6))
-                        ax4.axhline(0, color="gray", linewidth=1)
-                        ax4.plot(match_idx, margins, marker="o")
-                        ax4.set_xlabel("Match # (chronological)")
-                        ax4.set_ylabel(f"{pair_selected} − {solo_selected}")
-                        st.pyplot(fig4, use_container_width=True)
-                        plt.close(fig4)
-                        st.markdown(
-                            "<p style='font-size:0.7rem; text-align:right; opacity:0.7;'>"
-                            "Each point is one 2v1 game: above 0 = win for the 2-player side, "
-                            "below 0 = win for the solo player."
-                            "</p>",
-                            unsafe_allow_html=True,
-                        )
 
 # ---------- PAGE: ALL DATA ----------
 elif page == "All Data":
     st.subheader(f"📄 All Data – {selected_game}")
 
-    # 1v1
-    st.markdown("### 1v1 Matches")
-    if df_1v1_game.empty:
-        st.info(f"No 1v1 data yet for {selected_game}.")
-    else:
-        players_in_game = sorted(
-            set(df_1v1_game["player1"].dropna().unique()).union(
-                set(df_1v1_game["player2"].dropna().unique())
-            )
-        )
-        col_f1, _ = st.columns(2)
-        with col_f1:
-            player_filter = st.selectbox(
-                "Filter 1v1 by player (optional)",
-                ["(All players)"] + players_in_game,
-                key="all_data_player_filter",
-            )
-        filtered_1v1 = df_1v1_game.copy()
-        if player_filter != "(All players)":
-            mask = (filtered_1v1["player1"] == player_filter) | (
-                filtered_1v1["player2"] == player_filter
-            )
-            filtered_1v1 = filtered_1v1[mask]
+    tab1, tab2, tab3 = st.tabs(["1v1", "2v2", "2v1"])
 
-        st.dataframe(
-            filtered_1v1.sort_values(by="date", ascending=False),
-            use_container_width=True,
-        )
+    with tab1:
+        st.markdown("#### 1v1 matches")
+        if df_1v1_game.empty:
+            st.info(f"No 1v1 data yet for {selected_game}.")
+        else:
+            st.dataframe(df_1v1_game, use_container_width=True)
 
-    st.markdown("### 2v2 Matches")
-    if df_2v2_game.empty:
-        st.info(f"No 2v2 data yet for {selected_game}.")
-    else:
-        teams_in_game = sorted(
-            set(df_2v2_game["team1_name"].dropna().unique()).union(
-                set(df_2v2_game["team2_name"].dropna().unique())
-            )
-        )
-        col_tf1, _ = st.columns(2)
-        with col_tf1:
-            team_filter = st.selectbox(
-                "Filter 2v2 by team (optional)",
-                ["(All teams)"] + teams_in_game,
-                key="all_data_team_filter",
-            )
-        filtered_2v2 = df_2v2_game.copy()
-        if team_filter != "(All teams)":
-            mask_t = (filtered_2v2["team1_name"] == team_filter) | (
-                filtered_2v2["team2_name"] == team_filter
-            )
-            filtered_2v2 = filtered_2v2[mask_t]
+    with tab2:
+        st.markdown("#### 2v2 matches")
+        if df_2v2_game.empty:
+            st.info(f"No 2v2 data yet for {selected_game}.")
+        else:
+            st.dataframe(df_2v2_game, use_container_width=True)
 
-        st.dataframe(
-            filtered_2v2.sort_values(by="date", ascending=False),
-            use_container_width=True,
-        )
-
-    st.markdown("### 2v1 Matches")
-    if df_2v1_game.empty:
-        st.info(f"No 2v1 data yet for {selected_game}.")
-    else:
-        pairs = sorted(df_2v1_game["team1_players"].dropna().unique())
-        solos = sorted(df_2v1_game["team2_players"].dropna().unique())
-        col_p, col_s = st.columns(2)
-        with col_p:
-            pair_filter = st.selectbox(
-                "Filter by 2-player side (optional)",
-                ["(All pairs)"] + pairs,
-                key="all_data_pair_filter",
-            )
-        with col_s:
-            solo_filter = st.selectbox(
-                "Filter by solo player (optional)",
-                ["(All solos)"] + solos,
-                key="all_data_solo_filter",
-            )
-
-        filtered_2v1 = df_2v1_game.copy()
-        if pair_filter != "(All pairs)":
-            filtered_2v1 = filtered_2v1[filtered_2v1["team1_players"] == pair_filter]
-        if solo_filter != "(All solos)":
-            filtered_2v1 = filtered_2v1[filtered_2v1["team2_players"] == solo_filter]
-
-        st.dataframe(
-            filtered_2v1.sort_values(by="date", ascending=False),
-            use_container_width=True,
-        )
+    with tab3:
+        st.markdown("#### 2v1 matches")
+        if df_2v1_game.empty:
+            st.info(f"No 2v1 data yet for {selected_game}.")
+        else:
+            st.dataframe(df_2v1_game, use_container_width=True)
