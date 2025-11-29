@@ -1010,24 +1010,26 @@ if page == "Dashboard":
 
     st.markdown("---")
 
-    # --- 2v2 leaderboard – full width with Rank ---
-    st.markdown("### 👥 2v2 Team Leaderboard")
+    # ---------- 2v2 TEAM LEADERBOARD ----------
+    st.markdown("## 👥 2v2 Team Leaderboard")
 
     if leaderboard_teams.empty:
         st.info(f"No 2v2 matches yet for {selected_game}.")
     else:
+        # Sort and add Rank column
         leaderboard_teams = leaderboard_teams.sort_values(
-            by=["win_pct", "goal_diff"],
-            ascending=[False, False],
+            by=["elo_rating", "win_pct", "goal_diff"],
+            ascending=[False, False, False],
         ).reset_index(drop=True)
 
-        leaderboard_teams.insert(0, "Rank", leaderboard_teams.index + 1)
+        if "Rank" not in leaderboard_teams.columns:
+            leaderboard_teams.insert(0, "Rank", leaderboard_teams.index + 1)
 
-        display_cols_t = [
+        # Columns we *would like* to show
+        desired_cols_t = [
             "Rank",
             "team",
             "players",
-            "club",
             "games",
             "wins",
             "draws",
@@ -1038,20 +1040,26 @@ if page == "Dashboard":
             "avg_goals_for",
             "avg_goals_against",
             "win_pct",
+            "elo_rating",
         ]
-        if "elo_rating" in leaderboard_teams.columns:
-            display_cols_t.append("elo_rating")
+
+        # Only keep those that actually exist in the dataframe
+        display_cols_t = [c for c in desired_cols_t if c in leaderboard_teams.columns]
+
+        # Formatting map – also trimmed to existing columns
+        fmt_team = {
+            "avg_goals_for": "{:.2f}",
+            "avg_goals_against": "{:.2f}",
+            "win_pct": "{:.1%}",
+            "elo_rating": "{:.0f}",
+        }
+        fmt_team = {k: v for k, v in fmt_team.items() if k in display_cols_t}
 
         st.dataframe(
-            leaderboard_teams[display_cols_t].style.format(
-                {
-                    "avg_goals_for": "{:.2f}",
-                    "avg_goals_against": "{:.2f}",
-                    "win_pct": "{:.1%}",
-                }
-            ),
+            leaderboard_teams[display_cols_t].style.format(fmt_team),
             use_container_width=True,
         )
+
 
         fig2, ax2 = plt.subplots(figsize=(6, 2.5))
         ax2.bar(leaderboard_teams["team"], leaderboard_teams["goals_for"])
