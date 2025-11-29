@@ -462,24 +462,24 @@ def build_team_leaderboard_2v2(df: pd.DataFrame, game: str) -> pd.DataFrame:
         else:
             r1 = r2 = "D"
 
-        rows.append(
-            {
-                "team": t1,
-                "players": p1_players,
-                "goals_for": s1,
-                "goals_against": s2,
-                "result": r1,
-            }
-        )
-        rows.append(
-            {
-                "team": t2,
-                "players": p2_players,
-                "goals_for": s2,
-                "goals_against": s1,
-                "result": r2,
-            }
-        )
+        rows.append({
+            "team": f"{lineup_key(p1_players)} ({t1})",
+            "players": lineup_key(p1_players),
+            "club": t1,
+            "goals_for": s1,
+            "goals_against": s2,
+            "result": r1,
+        })
+
+        rows.append({
+            "team": f"{lineup_key(p2_players)} ({t2})",
+            "players": lineup_key(p2_players),
+            "club": t2,
+            "goals_for": s2,
+            "goals_against": s1,
+            "result": r2,
+        })
+
 
     stats_df = pd.DataFrame(rows)
     grouped = stats_df.groupby("team").agg(
@@ -1027,6 +1027,7 @@ if page == "Dashboard":
             "Rank",
             "team",
             "players",
+            "club",
             "games",
             "wins",
             "draws",
