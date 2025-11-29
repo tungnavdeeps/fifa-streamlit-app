@@ -2603,50 +2603,50 @@ with st.expander("📊 Show charts"):
 
 
 
-    # ---------- Upgraded prediction: win rate + xG edge ----------
-    st.markdown("---")
-    st.markdown("### Win Prediction (for next 2v2)")
-
-    base_wr_A = wins_A / total_games_2v2
-    base_wr_B = wins_B / total_games_2v2
-
-    avg_xg_for_A = stats_A["avg_xg_for"]
-    avg_xg_for_B = stats_B["avg_xg_for"]
-
-    # xG edge per game (A − B)
-    xg_edge = avg_xg_for_A - avg_xg_for_B
-
-    # Combine into a single score:
-    #   0.5 baseline
-    #   + 0.35 * (win-rate diff)
-    #   + 0.15 * (xG edge)
-    raw_score = 0.5 + 0.35 * (base_wr_A - base_wr_B) + 0.15 * xg_edge
-
-    # Clamp between 5% and 95%
-    prob_A = max(0.05, min(0.95, raw_score))
-    prob_B = 1.0 - prob_A
-
-    st.write("This prediction uses:")
-    st.write(
-        "- Historic 2v2 win rates in this rivalry\n"
-        "- Average xG advantage between the lineups"
-    )
-    st.write("Estimated win chance next match:")
-    st.write(f"- **{lineup_A}: {prob_A:.1%}**")
-    st.write(f"- **{lineup_B}: {prob_B:.1%}**")
-
-    if prob_A > 0.6:
-        st.success(
-            f"Stats favour **{lineup_A}** right now. "
-            f"Perfect chance for **{lineup_B}** to play spoiler 👀"
+        # ---------- Upgraded prediction: win rate + xG edge ----------
+        st.markdown("---")
+        st.markdown("### Win Prediction (for next 2v2)")
+    
+        base_wr_A = wins_A / total_games_2v2
+        base_wr_B = wins_B / total_games_2v2
+    
+        avg_xg_for_A = stats_A["avg_xg_for"]
+        avg_xg_for_B = stats_B["avg_xg_for"]
+    
+        # xG edge per game (A − B)
+        xg_edge = avg_xg_for_A - avg_xg_for_B
+    
+        # Combine into a single score:
+        #   0.5 baseline
+        #   + 0.35 * (win-rate diff)
+        #   + 0.15 * (xG edge)
+        raw_score = 0.5 + 0.35 * (base_wr_A - base_wr_B) + 0.15 * xg_edge
+    
+        # Clamp between 5% and 95%
+        prob_A = max(0.05, min(0.95, raw_score))
+        prob_B = 1.0 - prob_A
+    
+        st.write("This prediction uses:")
+        st.write(
+            "- Historic 2v2 win rates in this rivalry\n"
+            "- Average xG advantage between the lineups"
         )
-    elif prob_A < 0.4:
-        st.success(
-            f"Stats favour **{lineup_B}** right now. "
-            f"**{lineup_A}** comes in as the underdog."
-        )
-    else:
-        st.info("This rivalry looks tight. Either lineup could take it.")
+        st.write("Estimated win chance next match:")
+        st.write(f"- **{lineup_A}: {prob_A:.1%}**")
+        st.write(f"- **{lineup_B}: {prob_B:.1%}**")
+    
+        if prob_A > 0.6:
+            st.success(
+                f"Stats favour **{lineup_A}** right now. "
+                f"Perfect chance for **{lineup_B}** to play spoiler 👀"
+            )
+        elif prob_A < 0.4:
+            st.success(
+                f"Stats favour **{lineup_B}** right now. "
+                f"**{lineup_A}** comes in as the underdog."
+            )
+        else:
+            st.info("This rivalry looks tight. Either lineup could take it.")
 
 # ---------- PAGE: ALL DATA ----------
 elif page == "All Data":
