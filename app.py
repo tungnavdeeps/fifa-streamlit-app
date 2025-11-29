@@ -2356,7 +2356,6 @@ elif page == "Head-to-Head (2v2)":
                             + " · ".join(form_symbols[::-1])
                         )
 
-                                   # ---------- LINE-UPS & CLUBS USED ----------
                 # ---------- Line-ups and clubs used ----------
                 st.markdown("### Line-ups and clubs used in this matchup")
 
@@ -2461,138 +2460,141 @@ elif page == "Head-to-Head (2v2)":
                             use_container_width=True,
                         )
 
+                # ---------- Match history ----------
+                st.markdown("### Match history")
+                st.dataframe(
+                    h2h_df_2v2[
+                        [
+                            "date",
+                            "team1_name",
+                            "team1_players",
+                            "score1",
+                            "xG1",
+                            "score2",
+                            "xG2",
+                            "team2_players",
+                            "team2_name",
+                        ]
+                    ].sort_values(by="date", ascending=False),
+                    use_container_width=True,
+                )
 
+                # ----------------- CHARTS IN EXPANDER -----------------
+                with st.expander("📊 Show charts"):
+                    goal_margins_abs = stats_t1["margins_abs"]
+                    match_idx = stats_t1["match_idx"]
+                    t1_goals = stats_t1["goals_series"]
+                    t2_goals = stats_t2["goals_series"]
+                    t1_xg = np.array(stats_t1["xg_series"], dtype=float)
+                    t2_xg = np.array(stats_t2["xg_series"], dtype=float)
+                    score_diffs = stats_t1["margins_signed"]
 
-                    # ---------- Match history ----------
-                    st.markdown("### Match history")
-                    st.dataframe(
-                        h2h_df_2v2[
-                            [
-                                "date",
-                                "team1_players",
-                                "score1",
-                                "xG1",
-                                "score2",
-                                "xG2",
-                                "team2_players",
-                            ]
-                        ].sort_values(by="date", ascending=False),
-                        use_container_width=True,
+                    # 1) Wins / draws bar
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        fig, ax = plt.subplots(figsize=(4.0, 2.3))
+                        ax.bar([lineup_A, lineup_B, "Draws"], [wins_t1, wins_t2, draws_2v2])
+                        ax.set_ylabel("Games")
+                        ax.set_title("Wins / draws")
+                        ax.text(
+                            0.99,
+                            0.02,
+                            "Counts of wins/draws in this 2v2 head-to-head.",
+                            transform=ax.transAxes,
+                            ha="right",
+                            va="bottom",
+                            fontsize=7,
+                            color="#cccccc",
+                            alpha=0.8,
+                        )
+                        st.pyplot(fig, use_container_width=True)
+                        plt.close(fig)
+
+                    # 2) Goal margin distribution
+                    with c2:
+                        fig2, ax2 = plt.subplots(figsize=(4.0, 2.3))
+                        ones = sum(1 for m in goal_margins_abs if m == 1)
+                        twos = sum(1 for m in goal_margins_abs if m == 2)
+                        big = sum(1 for m in goal_margins_abs if m >= 3)
+                        labels = ["1 goal", "2 goals", "3+ goals"]
+                        counts = [ones, twos, big]
+                        ax2.bar(labels, counts)
+                        ax2.set_ylabel("Games")
+                        ax2.set_title("Scoreline spread")
+                        ax2.text(
+                            0.99,
+                            0.02,
+                            "How often games are decided by 1, 2, or 3+ goals.",
+                            transform=ax2.transAxes,
+                            ha="right",
+                            va="bottom",
+                            fontsize=7,
+                            color="#cccccc",
+                            alpha=0.8,
+                        )
+                        st.pyplot(fig2, use_container_width=True)
+                        plt.close(fig2)
+
+                    # 3) Goals & xG per match over time
+                    st.markdown("#### Goals and xG per match over time")
+                    if match_idx:
+                        fig3, ax3 = plt.subplots(figsize=(6, 2.6))
+                        ax3.plot(match_idx, t1_goals, marker="o", label=f"{lineup_A} goals")
+                        ax3.plot(match_idx, t2_goals, marker="o", label=f"{lineup_B} goals")
+
+                        if np.any(~np.isnan(t1_xg)):
+                            ax3.plot(
+                                match_idx,
+                                t1_xg,
+                                marker="x",
+                                linestyle="--",
+                                label=f"{lineup_A} xG",
+                            )
+                        if np.any(~np.isnan(t2_xg)):
+                            ax3.plot(
+                                match_idx,
+                                t2_xg,
+                                marker="x",
+                                linestyle="--",
+                                label=f"{lineup_B} xG",
+                            )
+
+                        ax3.set_xlabel("Match # (chronological)")
+                        ax3.set_ylabel("Goals / xG")
+                        ax3.legend(fontsize=8)
+                        ax3.text(
+                            0.99,
+                            0.02,
+                            "Match-by-match goals and expected goals.",
+                            transform=ax3.transAxes,
+                            ha="right",
+                            va="bottom",
+                            fontsize=7,
+                            color="#cccccc",
+                            alpha=0.8,
+                        )
+                        st.pyplot(fig3, use_container_width=True)
+                        plt.close(fig3)
+
+                    # 4) Score difference trend
+                    st.markdown(
+                        f"#### Score difference trend (positive = {lineup_A} ahead)"
                     )
+                    if match_idx:
+                        fig4, ax4 = plt.subplots(figsize=(6, 2.6))
+                        ax4.axhline(0, color="gray", linewidth=1)
+                        ax4.plot(match_idx, score_diffs, marker="o")
+                        ax4.set_xlabel("Match # (chronological)")
+                        ax4.set_ylabel(f"{lineup_A} − {lineup_B}")
+                        st.pyplot(fig4, use_container_width=True)
+                        plt.close(fig4)
+                        st.markdown(
+                            "<p style='font-size:0.7rem; text-align:right; opacity:0.7;'>"
+                            "Each point is one 2v2 game: above 0 = win for line-up A, below 0 = win for line-up B."
+                            "</p>",
+                            unsafe_allow_html=True,
+                        )
 
-                    # ---------- Charts in expander ----------
-                    with st.expander("📊 Show charts"):
-                        goal_margins_abs = stats_A["margins_abs"]
-                        match_idx = stats_A["match_idx"]
-                        A_goals = stats_A["goals_series"]
-                        B_goals = stats_B["goals_series"]
-                        A_xg = np.array(stats_A["xg_series"], dtype=float)
-                        B_xg = np.array(stats_B["xg_series"], dtype=float)
-                        score_diffs = stats_A["margins_signed"]
-
-                        # 1) Wins / draws bar
-                        c1, c2 = st.columns(2)
-                        with c1:
-                            fig, ax = plt.subplots(figsize=(4.0, 2.3))
-                            ax.bar([lineup_A, lineup_B, "Draws"], [wins_A, wins_B, draws_2v2])
-                            ax.set_ylabel("Games")
-                            ax.set_title("Wins / draws")
-                            ax.text(
-                                0.99,
-                                0.02,
-                                "Counts of wins/draws in this 2v2 rivalry.",
-                                transform=ax.transAxes,
-                                ha="right",
-                                va="bottom",
-                                fontsize=7,
-                                color="#cccccc",
-                                alpha=0.8,
-                            )
-                            st.pyplot(fig, use_container_width=True)
-                            plt.close(fig)
-
-                        # 2) Goal margin distribution
-                        with c2:
-                            fig2, ax2 = plt.subplots(figsize=(4.0, 2.3))
-                            ones = sum(1 for m in goal_margins_abs if m == 1)
-                            twos = sum(1 for m in goal_margins_abs if m == 2)
-                            big = sum(1 for m in goal_margins_abs if m >= 3)
-                            labels = ["1 goal", "2 goals", "3+ goals"]
-                            counts = [ones, twos, big]
-                            ax2.bar(labels, counts)
-                            ax2.set_ylabel("Games")
-                            ax2.set_title("Scoreline spread")
-                            ax2.text(
-                                0.99,
-                                0.02,
-                                "How often games are decided by 1, 2, or 3+ goals.",
-                                transform=ax2.transAxes,
-                                ha="right",
-                                va="bottom",
-                                fontsize=7,
-                                color="#cccccc",
-                                alpha=0.8,
-                            )
-                            st.pyplot(fig2, use_container_width=True)
-                            plt.close(fig2)
-
-                        # 3) Goals & xG per match over time
-                        st.markdown("#### Goals and xG per match over time")
-                        if match_idx:
-                            fig3, ax3 = plt.subplots(figsize=(6, 2.6))
-                            ax3.plot(match_idx, A_goals, marker="o", label=f"{lineup_A} goals")
-                            ax3.plot(match_idx, B_goals, marker="o", label=f"{lineup_B} goals")
-
-                            if np.any(~np.isnan(A_xg)):
-                                ax3.plot(
-                                    match_idx,
-                                    A_xg,
-                                    marker="x",
-                                    linestyle="--",
-                                    label=f"{lineup_A} xG",
-                                )
-                            if np.any(~np.isnan(B_xg)):
-                                ax3.plot(
-                                    match_idx,
-                                    B_xg,
-                                    marker="x",
-                                    linestyle="--",
-                                    label=f"{lineup_B} xG",
-                                )
-
-                            ax3.set_xlabel("Match # (chronological)")
-                            ax3.set_ylabel("Goals / xG")
-                            ax3.legend(fontsize=8)
-                            ax3.text(
-                                0.99,
-                                0.02,
-                                "Match-by-match goals and expected goals.",
-                                transform=ax3.transAxes,
-                                ha="right",
-                                va="bottom",
-                                fontsize=7,
-                                color="#cccccc",
-                                alpha=0.8,
-                            )
-                            st.pyplot(fig3, use_container_width=True)
-                            plt.close(fig3)
-
-                        # 4) Score difference trend
-                        st.markdown(f"#### Score difference trend (positive = {lineup_A} ahead)")
-                        if match_idx:
-                            fig4, ax4 = plt.subplots(figsize=(6, 2.6))
-                            ax4.axhline(0, color="gray", linewidth=1)
-                            ax4.plot(match_idx, score_diffs, marker="o")
-                            ax4.set_xlabel("Match # (chronological)")
-                            ax4.set_ylabel(f"{lineup_A} − {lineup_B}")
-                            st.pyplot(fig4, use_container_width=True)
-                            plt.close(fig4)
-                            st.markdown(
-                                "<p style='font-size:0.7rem; text-align:right; opacity:0.7;'>"
-                                "Each point is one 2v2 game: above 0 = win for Lineup A, below 0 = win for Lineup B."
-                                "</p>",
-                                unsafe_allow_html=True,
-                            )
 
                     # ---------- Upgraded prediction: win rate + xG edge ----------
                     st.markdown("---")
