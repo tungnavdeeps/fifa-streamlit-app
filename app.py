@@ -2357,36 +2357,38 @@ elif page == "Head-to-Head (2v2)":
                         )
 
                                    # ---------- LINE-UPS & CLUBS USED ----------
+                # ---------- Line-ups and clubs used ----------
                 st.markdown("### Line-ups and clubs used in this matchup")
 
-                import pandas as pd
+                import pandas as pd  # safe even if already imported at top
 
-                def _lineup_table(df: pd.DataFrame, focus_side: str) -> pd.DataFrame:
+                def _lineup_table(df: pd.DataFrame, focus_lineup_key: str) -> pd.DataFrame:
                     """
-                    For a given 2v2 side (t1 or t2), aggregate stats by:
-                    - lineup  (player combination)
-                    - club    (team/club they picked in the game)
+                    For a given lineup key (e.g. 'Harman + Navdeep'), show
+                    which club they used and how they performed.
                     """
                     records = []
 
                     for _, row in df.iterrows():
-                        if row["team1_name"] == focus_side:
-                            club = row["team1_name"]              # club used
-                            lineup = row.get("team1_players", "") # players on that side
+                        if row["team1_lineup_key"] == focus_lineup_key:
+                            lineup = row.get("team1_players", "")
+                            club = row.get("team1_name", "")
                             gf = row["score1"]
                             ga = row["score2"]
-                        else:
-                            club = row["team2_name"]
+                        elif row["team2_lineup_key"] == focus_lineup_key:
                             lineup = row.get("team2_players", "")
+                            club = row.get("team2_name", "")
                             gf = row["score2"]
                             ga = row["score1"]
+                        else:
+                            continue
 
                         records.append(
                             {
                                 "lineup": lineup,
                                 "club": club,
-                                "gf": gf,
-                                "ga": ga,
+                                "goals_for": gf,
+                                "goals_against": ga,
                             }
                         )
 
@@ -2397,9 +2399,9 @@ elif page == "Head-to-Head (2v2)":
                     tab = (
                         tab.groupby(["lineup", "club"])
                         .agg(
-                            games=("gf", "count"),
-                            goals_for=("gf", "sum"),
-                            goals_against=("ga", "sum"),
+                            games=("goals_for", "count"),
+                            goals_for=("goals_for", "sum"),
+                            goals_against=("goals_against", "sum"),
                         )
                         .reset_index()
                     )
@@ -2407,20 +2409,18 @@ elif page == "Head-to-Head (2v2)":
                     tab["avg_goals_against"] = tab["goals_against"] / tab["games"]
                     return tab
 
-                tab_t1 = _lineup_table(h2h_df_2v2, t1)
-                tab_t2 = _lineup_table(h2h_df_2v2, t2)
+                tab_A = _lineup_table(h2h_df_2v2, lineup_A)
+                tab_B = _lineup_table(h2h_df_2v2, lineup_B)
 
                 colT1, colT2 = st.columns(2)
-
                 with colT1:
-                    st.markdown(f"**{t1} line-ups vs {t2}**")
-                    if tab_t1.empty:
+                    st.markdown(f"**{lineup_A} – clubs & record**")
+                    if tab_A.empty:
                         st.write("No line-up data recorded.")
                     else:
                         st.dataframe(
-                            tab_t1[
+                            tab_A[
                                 [
-                                    "lineup",
                                     "club",
                                     "games",
                                     "goals_for",
@@ -2438,14 +2438,13 @@ elif page == "Head-to-Head (2v2)":
                         )
 
                 with colT2:
-                    st.markdown(f"**{t2} line-ups vs {t1}**")
-                    if tab_t2.empty:
+                    st.markdown(f"**{lineup_B} – clubs & record**")
+                    if tab_B.empty:
                         st.write("No line-up data recorded.")
                     else:
                         st.dataframe(
-                            tab_t2[
+                            tab_B[
                                 [
-                                    "lineup",
                                     "club",
                                     "games",
                                     "goals_for",
@@ -2461,6 +2460,7 @@ elif page == "Head-to-Head (2v2)":
                             ),
                             use_container_width=True,
                         )
+
 
 
                     # ---------- Match history ----------
