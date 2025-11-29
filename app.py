@@ -2653,6 +2653,7 @@ with st.expander("📊 Show charts"):
 elif page == "All Data":
     st.subheader(f"📄 All Data – {selected_game}")
 
+    # ==== 1v1 Matches =======================================================
     st.markdown("#### 1v1 Matches")
     if df_1v1_game.empty:
         st.info(f"No 1v1 data yet for {selected_game}.")
@@ -2664,9 +2665,13 @@ elif page == "All Data":
                 ["(All players)"] + players_game,
                 key="all_data_player_filter",
             )
+
         filtered_1v1 = df_1v1_game.copy()
         if player_filter != "(All players)":
-            mask = (filtered_1v1["player1"] == player_filter) | (filtered_1v1["player2"] == player_filter)
+            mask = (
+                (filtered_1v1["player1"] == player_filter)
+                | (filtered_1v1["player2"] == player_filter)
+            )
             filtered_1v1 = filtered_1v1[mask]
 
         st.dataframe(
@@ -2674,6 +2679,7 @@ elif page == "All Data":
             use_container_width=True,
         )
 
+    # ==== 2v2 Matches =======================================================
     st.markdown("#### 2v2 Matches")
     if df_2v2_game.empty:
         st.info(f"No 2v2 data yet for {selected_game}.")
@@ -2690,12 +2696,50 @@ elif page == "All Data":
                 ["(All teams)"] + teams_in_game,
                 key="all_data_team_filter",
             )
+
         filtered_2v2 = df_2v2_game.copy()
         if team_filter != "(All teams)":
-            mask_t = (filtered_2v2["team1_name"] == team_filter) | (filtered_2v2["team2_name"] == team_filter)
+            mask_t = (
+                (filtered_2v2["team1_name"] == team_filter)
+                | (filtered_2v2["team2_name"] == team_filter)
+            )
             filtered_2v2 = filtered_2v2[mask_t]
 
         st.dataframe(
             filtered_2v2.sort_values(by="date", ascending=False),
+            use_container_width=True,
+        )
+
+    # ==== 2v1 Matches =======================================================
+    st.markdown("#### 2v1 Matches")
+    if df_2v1_game.empty:
+        st.info(f"No 2v1 data yet for {selected_game}.")
+    else:
+        # optional filter by solo player or team name
+        solo_players = sorted(df_2v1_game["team2_name"].dropna().unique())
+        teams_2v1 = sorted(df_2v1_game["team1_name"].dropna().unique())
+
+        col_2v1a, col_2v1b = st.columns(2)
+        with col_2v1a:
+            solo_filter = st.selectbox(
+                "Filter 2v1 by solo player (optional)",
+                ["(All solo players)"] + solo_players,
+                key="all_data_2v1_solo_filter",
+            )
+        with col_2v1b:
+            team2v1_filter = st.selectbox(
+                "Filter 2v1 by team (optional)",
+                ["(All 2-player teams)"] + teams_2v1,
+                key="all_data_2v1_team_filter",
+            )
+
+        filtered_2v1 = df_2v1_game.copy()
+        if solo_filter != "(All solo players)":
+            filtered_2v1 = filtered_2v1[filtered_2v1["team2_name"] == solo_filter]
+        if team2v1_filter != "(All 2-player teams)":
+            filtered_2v1 = filtered_2v1[filtered_2v1["team1_name"] == team2v1_filter]
+
+        st.dataframe(
+            filtered_2v1.sort_values(by="date", ascending=False),
             use_container_width=True,
         )
