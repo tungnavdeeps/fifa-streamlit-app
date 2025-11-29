@@ -2356,86 +2356,112 @@ elif page == "Head-to-Head (2v2)":
                             + " · ".join(form_symbols[::-1])
                         )
 
-                    # ---------- Line-ups table (just showing the player strings) ----------
-                    def _lineup_table(df, focus_lineup_key: str):
-                        records = []
-                        for _, row in df.iterrows():
-                            if row["team1_lineup_key"] == focus_lineup_key:
-                                lineup = row.get("team1_players", "")
-                                gf = row["score1"]
-                                ga = row["score2"]
-                            else:
-                                lineup = row.get("team2_players", "")
-                                gf = row["score2"]
-                                ga = row["score1"]
-                            records.append({"lineup": lineup, "gf": gf, "ga": ga})
-                        if not records:
-                            return pd.DataFrame()
-                        tab = pd.DataFrame(records)
-                        tab = (
-                            tab.groupby("lineup")
-                            .agg(
-                                games=("gf", "count"),
-                                goals_for=("gf", "sum"),
-                                goals_against=("ga", "sum"),
-                            )
-                            .reset_index()
+                                   # ---------- LINE-UPS & CLUBS USED ----------
+                st.markdown("### Line-ups and clubs used in this matchup")
+
+                import pandas as pd
+
+                def _lineup_table(df: pd.DataFrame, focus_side: str) -> pd.DataFrame:
+                    """
+                    For a given 2v2 side (t1 or t2), aggregate stats by:
+                    - lineup  (player combination)
+                    - club    (team/club they picked in the game)
+                    """
+                    records = []
+
+                    for _, row in df.iterrows():
+                        if row["team1_name"] == focus_side:
+                            club = row["team1_name"]              # club used
+                            lineup = row.get("team1_players", "") # players on that side
+                            gf = row["score1"]
+                            ga = row["score2"]
+                        else:
+                            club = row["team2_name"]
+                            lineup = row.get("team2_players", "")
+                            gf = row["score2"]
+                            ga = row["score1"]
+
+                        records.append(
+                            {
+                                "lineup": lineup,
+                                "club": club,
+                                "gf": gf,
+                                "ga": ga,
+                            }
                         )
-                        tab["avg_goals_for"] = tab["goals_for"] / tab["games"]
-                        tab["avg_goals_against"] = tab["goals_against"] / tab["games"]
-                        return tab
 
-                    tab_A = _lineup_table(h2h_df_2v2, lineup_A)
-                    tab_B = _lineup_table(h2h_df_2v2, lineup_B)
+                    if not records:
+                        return pd.DataFrame()
 
-                    st.markdown("### Line-ups used in this matchup")
-                    colT1, colT2 = st.columns(2)
-                    with colT1:
-                        st.markdown(f"**{lineup_A} variants vs {lineup_B}**")
-                        if tab_A.empty:
-                            st.write("No line-up data recorded.")
-                        else:
-                            st.dataframe(
-                                tab_A[
-                                    [
-                                        "lineup",
-                                        "games",
-                                        "goals_for",
-                                        "goals_against",
-                                        "avg_goals_for",
-                                        "avg_goals_against",
-                                    ]
-                                ].style.format(
-                                    {
-                                        "avg_goals_for": "{:.2f}",
-                                        "avg_goals_against": "{:.2f}",
-                                    }
-                                ),
-                                use_container_width=True,
-                            )
-                    with colT2:
-                        st.markdown(f"**{lineup_B} variants vs {lineup_A}**")
-                        if tab_B.empty:
-                            st.write("No line-up data recorded.")
-                        else:
-                            st.dataframe(
-                                tab_B[
-                                    [
-                                        "lineup",
-                                        "games",
-                                        "goals_for",
-                                        "goals_against",
-                                        "avg_goals_for",
-                                        "avg_goals_against",
-                                    ]
-                                ].style.format(
-                                    {
-                                        "avg_goals_for": "{:.2f}",
-                                        "avg_goals_against": "{:.2f}",
-                                    }
-                                ),
-                                use_container_width=True,
-                            )
+                    tab = pd.DataFrame(records)
+                    tab = (
+                        tab.groupby(["lineup", "club"])
+                        .agg(
+                            games=("gf", "count"),
+                            goals_for=("gf", "sum"),
+                            goals_against=("ga", "sum"),
+                        )
+                        .reset_index()
+                    )
+                    tab["avg_goals_for"] = tab["goals_for"] / tab["games"]
+                    tab["avg_goals_against"] = tab["goals_against"] / tab["games"]
+                    return tab
+
+                tab_t1 = _lineup_table(h2h_df_2v2, t1)
+                tab_t2 = _lineup_table(h2h_df_2v2, t2)
+
+                colT1, colT2 = st.columns(2)
+
+                with colT1:
+                    st.markdown(f"**{t1} line-ups vs {t2}**")
+                    if tab_t1.empty:
+                        st.write("No line-up data recorded.")
+                    else:
+                        st.dataframe(
+                            tab_t1[
+                                [
+                                    "lineup",
+                                    "club",
+                                    "games",
+                                    "goals_for",
+                                    "goals_against",
+                                    "avg_goals_for",
+                                    "avg_goals_against",
+                                ]
+                            ].style.format(
+                                {
+                                    "avg_goals_for": "{:.2f}",
+                                    "avg_goals_against": "{:.2f}",
+                                }
+                            ),
+                            use_container_width=True,
+                        )
+
+                with colT2:
+                    st.markdown(f"**{t2} line-ups vs {t1}**")
+                    if tab_t2.empty:
+                        st.write("No line-up data recorded.")
+                    else:
+                        st.dataframe(
+                            tab_t2[
+                                [
+                                    "lineup",
+                                    "club",
+                                    "games",
+                                    "goals_for",
+                                    "goals_against",
+                                    "avg_goals_for",
+                                    "avg_goals_against",
+                                ]
+                            ].style.format(
+                                {
+                                    "avg_goals_for": "{:.2f}",
+                                    "avg_goals_against": "{:.2f}",
+                                }
+                            ),
+                            use_container_width=True,
+                        )
+
 
                     # ---------- Match history ----------
                     st.markdown("### Match history")
