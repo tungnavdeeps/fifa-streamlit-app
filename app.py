@@ -534,21 +534,27 @@ teams_all = sorted(teams_1v1.union(teams_2v2).union(teams_2v1))
 if page == "Dashboard":
     st.subheader(f"🏠 Season Summary – {selected_game}")
 
+    # --- Top KPI tiles ---
     colA, colB, colC, colD = st.columns(4)
 
     total_matches = len(df_1v1_game) + len(df_2v2_game)
     total_goals = 0
-    if not df_1v1_game.empty: total_goals += df_1v1_game["score1"].sum() + df_1v1_game["score2"].sum()
-    if not df_2v2_game.empty: total_goals += df_2v2_game["score1"].sum() + df_2v2_game["score2"].sum()
+    if not df_1v1_game.empty:
+        total_goals += df_1v1_game["score1"].sum() + df_1v1_game["score2"].sum()
+    if not df_2v2_game.empty:
+        total_goals += df_2v2_game["score1"].sum() + df_2v2_game["score2"].sum()
 
     leaderboard_players = build_player_leaderboard_1v1(df_1v1, selected_game)
     leaderboard_teams = build_team_leaderboard_2v2(df_2v2, selected_game)
 
     if not leaderboard_players.empty:
         top_player_row = leaderboard_players.iloc[0]
-        top_player, top_player_elo = top_player_row["player"], top_player_row["elo_rating"]
+        top_player = top_player_row["player"]
+        top_player_elo = top_player_row["elo_rating"]
+        
         best_attacker_row = leaderboard_players.sort_values(by="avg_goals_for", ascending=False).iloc[0]
-        best_attacker, best_attacker_gpg = best_attacker_row["player"], best_attacker_row["avg_goals_for"]
+        best_attacker = best_attacker_row["player"]
+        best_attacker_gpg = best_attacker_row["avg_goals_for"]
     else:
         top_player, top_player_elo, best_attacker, best_attacker_gpg = "N/A", 0, "N/A", 0
 
@@ -558,32 +564,99 @@ if page == "Dashboard":
     colD.metric("Most goals per game", best_attacker, f"{best_attacker_gpg:.2f} goals/game" if best_attacker != "N/A" else "")
 
     st.markdown("---")
-    st.markdown("### 👤 1v1 Player Leaderboard")
 
+    # ==========================================
+    # 1V1 SECTION (AWARDS + LEADERBOARD)
+    # ==========================================
+    st.markdown("### 🏆 1v1 Player Awards & Titles")
+
+    if leaderboard_players.empty:
+        st.info("No 1v1 matches yet to calculate player titles.")
+    else:
+        from collections import defaultdict
+        awards_1v1 = {}
+
+        # Golden Boot – total goals
+        golden_boot = leaderboard_players.sort_values("goals_for", ascending=False).iloc[0]
+        awards_1v1["Golden Boot (Top Scorer)"] = f"**{golden_boot['player']}** – {int(golden_boot['goals_for'])} goals"
+
+        eligible = leaderboard_players[leaderboard_players["games"] >= 5].copy()
+
+        if not eligible.empty:
+            best_def = eligible.sort_values("avg_goals_against").iloc[0]
+            awards_1v1["Brick Wall (Best Defense)"] = f"**{best_def['player']}** – {best_def['avg_goals_against']:.2f} avg conceded"
+
+            best_wr = eligible.sort_values("win_pct", ascending=False).iloc[0]
+            awards_1v1["Consistent Winner (Highest Win Rate)"] = f"**{best_wr['player']}** – {best_wr['win_pct']:.1%} wins"
+
+        # Attack threat
+        top_attack = leaderboard_players.sort_values("avg_goals_for", ascending=False).iloc[0]
+        awards_1v1["Most Feared Rival (Attack Threat)"] = f"**{top_attack['player']}** – {top_attack['avg_goals_for']:.2f} avg goals per game"
+
+        # Show all 1v1 awards
+        for title, desc in awards_1v1.items():
+            st.markdown(f"🏅 **{title}:** {desc}")
+
+    st.markdown("#### 👤 1v1 Player Leaderboard")
     if leaderboard_players.empty:
         st.info(f"No 1v1 matches yet for {selected_game}.")
     else:
-        leaderboard_players = leaderboard_players.sort_values(by=["elo_rating", "wins", "goal_diff"], ascending=[False, False, False]).reset_index(drop=True)
+        leaderboard_players = leaderboard_players.sort_values(
+            by=["elo_rating", "wins", "goal_diff"], ascending=[False, False, False]
+        ).reset_index(drop=True)
         leaderboard_players.insert(0, "Rank", leaderboard_players.index + 1)
 
         display_cols = ["Rank", "player", "games", "wins", "draws", "losses", "goals_for", "goals_against", "goal_diff", "avg_goals_for", "avg_goals_against", "win_pct", "elo_rating"]
-
-        st.dataframe(leaderboard_players[display_cols].style.format({"avg_goals_for": "{:.2f}", "avg_goals_against": "{:.2f}", "win_pct": "{:.1%}", "elo_rating": "{:.0f}"}), use_container_width=True)
+        st.dataframe(
+            leaderboard_players[display_cols].style.format({
+                "avg_goals_for": "{:.2f}", "avg_goals_against": "{:.2f}", "win_pct": "{:.1%}", "elo_rating": "{:.0f}"
+            }), 
+            use_container_width=True
+        )
 
     st.markdown("---")
-    st.markdown("## 👥 2v2 Team Leaderboard")
 
+    # ==========================================
+    # 2V2 SECTION (AWARDS + LEADERBOARD)
+    # ==========================================
+    st.markdown("### 🏆 2v2 Team Awards & Titles")
+
+    if leaderboard_teams.empty:
+        st.info("No 2v2 matches yet to calculate team titles.")
+    else:
+        awards_2v2 = {}
+        eligible_teams = leaderboard_teams[leaderboard_teams["games"] >= 3].copy()
+
+        if not eligible_teams.empty:
+            best_team = eligible_teams.sort_values("win_pct", ascending=False).iloc[0]
+            awards_2v2["Golden Duo (Best 2v2 Team)"] = f"**{best_team['team']}** – {best_team['win_pct']:.1%} win rate ({int(best_team['games'])} games)"
+
+            best_def_team = eligible_teams.sort_values("avg_goals_against").iloc[0]
+            awards_2v2["Fortress Duo (Best Defense)"] = f"**{best_def_team['team']}** – {best_def_team['avg_goals_against']:.2f} avg conceded"
+
+        top_attack_team = leaderboard_teams.sort_values("avg_goals_for", ascending=False).iloc[0]
+        awards_2v2["Attacking Duo (Most Goals per Game)"] = f"**{top_attack_team['team']}** – {top_attack_team['avg_goals_for']:.2f} avg goals scored"
+
+        for title, text in awards_2v2.items():
+            st.markdown(f"🏅 **{title}:** {text}")
+
+    st.markdown("#### 👥 2v2 Team Leaderboard")
     if leaderboard_teams.empty:
         st.info(f"No 2v2 matches yet for {selected_game}.")
     else:
-        leaderboard_teams = leaderboard_teams.sort_values(by=["elo_rating", "win_pct", "goal_diff"], ascending=[False, False, False]).reset_index(drop=True)
+        # FIXED: Removed 'elo_rating' from the sort parameters since 2v2 doesn't compute ELO
+        leaderboard_teams = leaderboard_teams.sort_values(
+            by=["win_pct", "goal_diff"], ascending=[False, False]
+        ).reset_index(drop=True)
+        
         if "Rank" not in leaderboard_teams.columns:
             leaderboard_teams.insert(0, "Rank", leaderboard_teams.index + 1)
 
-        desired_cols_t = ["Rank", "team", "players", "games", "wins", "draws", "losses", "goals_for", "goals_against", "goal_diff", "avg_goals_for", "avg_goals_against", "win_pct", "elo_rating"]
+        # FIXED: Removed 'elo_rating' from desired_cols_t
+        desired_cols_t = ["Rank", "team", "players", "games", "wins", "draws", "losses", "goals_for", "goals_against", "goal_diff", "avg_goals_for", "avg_goals_against", "win_pct"]
         display_cols_t = [c for c in desired_cols_t if c in leaderboard_teams.columns]
 
-        fmt_team = {"avg_goals_for": "{:.2f}", "avg_goals_against": "{:.2f}", "win_pct": "{:.1%}", "elo_rating": "{:.0f}"}
+        fmt_team = {"avg_goals_for": "{:.2f}", "avg_goals_against": "{:.2f}", "win_pct": "{:.1%}"}
         fmt_team = {k: v for k, v in fmt_team.items() if k in display_cols_t}
 
         st.dataframe(leaderboard_teams[display_cols_t].style.format(fmt_team), use_container_width=True)
