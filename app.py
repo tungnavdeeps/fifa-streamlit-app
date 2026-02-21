@@ -489,7 +489,10 @@ selected_game = st.sidebar.selectbox("Game version", GAME_OPTIONS)
 # =========================
 st.sidebar.markdown("### 🔐 Access")
 
-if not st.user.is_logged_in:
+# Safely check login status to prevent crashes if secrets are missing
+is_logged_in = getattr(st.user, "is_logged_in", False)
+
+if not is_logged_in:
     st.sidebar.button("Log in with Google", on_click=st.login)
     st.sidebar.caption("Log in to record matches. Guests can view stats.")
 else:
@@ -506,7 +509,7 @@ if refresh_clicked:
 # =========================
 nav_pages = ["Dashboard", "Head-to-Head (1v1)", "Head-to-Head (2v2)", "Head-to-Head (2v1)", "All Data"]
 
-if st.user.is_logged_in:
+if is_logged_in:
     nav_pages.insert(1, "Record Match")
 
 page = st.sidebar.radio("Go to", nav_pages)
